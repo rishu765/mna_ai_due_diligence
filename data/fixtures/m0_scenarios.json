@@ -1,0 +1,16 @@
+{
+  "fixture_set": "Northstar Components diligence",
+  "fictitious": true,
+  "scenarios": [
+    {"id": "clean-financial", "description": "Audited FY2025 financial information with traceable evidence"},
+    {"id": "conflicting-revenue", "description": "FY2025 revenue differs between audited statements and management presentation"},
+    {"id": "ebitda-addback", "description": "Management proposes a legal-fee EBITDA add-back"},
+    {"id": "customer-concentration", "description": "Largest customer represents 42 percent of revenue"},
+    {"id": "change-of-control", "description": "Key customer contract contains a change-of-control termination right"},
+    {"id": "missing-debt-schedule", "description": "Debt schedule and covenant documents have not been provided"},
+    {"id": "debt-like-item", "description": "Accrued transaction bonus is identified as a debt-like candidate"},
+    {"id": "working-capital", "description": "Reported net working capital is retained for later analysis"},
+    {"id": "high-severity-finding", "description": "Customer concentration is assessed as high severity"},
+    {"id": "analyst-review", "description": "Analyst approval preserves rationale and state transition"}
+  ]
+}
