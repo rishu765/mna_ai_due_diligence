@@ -7,12 +7,9 @@ from typing import Protocol
 
 from ma_due_diligence.domain import (
     DiligenceEngagement,
-    DiligenceFact,
-    DiligenceFinding,
     DiligenceWorkstream,
     DocumentType,
     EvidenceReference,
-    FactConflict,
     VdrDocument,
 )
 from ma_due_diligence.errors import DomainValidationError
@@ -90,23 +87,3 @@ class TableExtractionAdapter(Protocol):
     """Future provider-neutral table extraction boundary."""
 
     def extract(self, document: VdrDocument) -> tuple[TableExtractionCandidate, ...]: ...
-
-
-class SpecialistDiligenceAnalyzer(Protocol):
-    """Common contract for later financial, commercial, legal, and operational analyzers."""
-
-    @property
-    def workstream(self) -> DiligenceWorkstream: ...
-
-    def analyze(
-        self,
-        engagement: DiligenceEngagement,
-        facts: tuple[DiligenceFact, ...],
-        evidence: tuple[EvidenceReference, ...],
-    ) -> tuple[DiligenceFinding, ...]: ...
-
-
-class CrossDocumentVerifier(Protocol):
-    """Future semantic and deterministic cross-document comparison boundary."""
-
-    def compare(self, facts: tuple[DiligenceFact, ...]) -> tuple[FactConflict, ...]: ...

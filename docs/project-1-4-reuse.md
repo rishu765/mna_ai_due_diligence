@@ -55,3 +55,16 @@ module imports were added.
 Project 4's source hierarchy, retained conflicting observations, explicit verification status,
 evidence lineage, and review-ready ambiguity were adapted for financial reconciliation and
 candidate findings. M3 does not import Project 4 internals or add its LangGraph runtime.
+
+## M4/5 implementation update
+
+Project 4's provider protocols, immutable observation comparisons, retained open conflicts,
+source-priority review candidates, grounded explanation validation, and failure-as-data patterns
+were adapted locally. Project 5 adds diligence workstream retrieval plans, typed claims, period and
+revision compatibility, contributing-agent attribution, finding consolidation, lightweight
+relationships, compound risks, information requests, and investigation traces.
+
+No Project 4 source module is imported. Its transaction-specific verification contracts and
+LangGraph runtime were not reused because they have a different bounded context and M6/7 owns the
+Project 5 graph. LangChain was not used because the existing typed services provide the required
+structured boundaries without a new dependency.

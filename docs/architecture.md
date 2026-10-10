@@ -41,10 +41,11 @@ not calculate results.
 
 ## Future boundaries
 
-The VDR/RAG layer can later implement `DocumentIngestionProvider`, `DocumentClassifier`,
-`EvidenceRetriever`, and `TableExtractionAdapter`. Financial, commercial, contract, and operational
-components can implement `SpecialistDiligenceAnalyzer`. `CrossDocumentVerifier` accepts facts and
-returns retained conflicts. Protocols contain no provider SDK types.
+The VDR/RAG layer implements `DocumentIngestionProvider`, `DocumentClassifier`,
+`EvidenceRetriever`, and `TableExtractionAdapter` boundaries. M4/5 replaces the early placeholder
+analyzer contracts with concrete, provider-neutral `SpecialistAnalyzer`, `SpecialistContext`,
+`SpecialistResult`, and `CrossDocumentInvestigator` contracts in the `specialists` package. These
+contracts consume Project 5 types and contain no provider SDK types.
 
 ## Future graph state
 

@@ -17,8 +17,9 @@ M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, stru
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
 evaluation, and a reproducible demo. M3 adds evidence-bound financial observations, source
 reconciliation, QoE adjustment assessment, EBITDA, working-capital and net-debt bridges, financial
-findings, evaluation, and an offline demo. Specialist agents, LangGraph, API, and final reporting
-remain later milestones.
+findings, evaluation, and an offline demo. M4/5 adds evidence-bound specialist analyzers,
+cross-document investigation, finding consolidation, compound risks, and information requests.
+LangGraph, final human review, API, and final reporting remain later milestones.
 
 ## M&A Due-Diligence Workflow
 
@@ -51,7 +52,28 @@ future provider and analyzer boundaries. Schema-versioned serialization retains 
 dates, timestamps, and tuples. The future graph state is a typed contract only.
 
 M1/2 implements the left side through evidence retrieval. M3 implements deterministic financial
-analysis and candidate financial findings. Specialist conclusions and review remain later work.
+analysis and candidate financial findings. M4/5 implements specialist conclusions and
+cross-document investigation. Final orchestration and review remain later work.
+
+## Specialist Diligence and Investigation
+
+M4/5 provides financial, commercial, legal/contractual, and operational analyzers behind one typed
+interface. Each analyzer has an explicit retrieval plan and receives only relevant evidence plus
+shared claims and prior structured results. The financial specialist consumes M3 outputs without
+recalculating them.
+
+The cross-document investigator compares typed claims with period, entity, version, and source
+authority context. It retains unresolved numeric, Boolean, and date conflicts; marks older document
+revisions as superseded; and never overwrites a source value. Consolidation merges overlapping
+findings while retaining contributing agents and evidence. A bounded rule combines customer
+concentration, near-term expiry, and change-of-control consent into one compound candidate risk.
+
+Specialists also emit missing-information items and follow-up questions. The coordinator isolates
+agent failures, prepares a consolidated request list, and builds a full finding-to-document trace.
+Optional explanation providers may only cite evidence already attached to a finding.
+
+See [Specialist diligence and investigation](docs/specialist-agents-investigation.md). Run
+`madd-specialist-demo` for the offline workflow and ten-category evaluation.
 
 ## Financial Due Diligence and Quality of Earnings
 
@@ -242,6 +264,10 @@ embedding boundary, and retrieval contracts. It adapts Project 4's BM25, weighte
 metadata filters, atomic index updates, and quality warnings. No private cross-project module is
 imported. See [VDR intelligence and RAG](docs/vdr-intelligence-rag.md).
 
+M4/5 adapts Project 4's retained-conflict, source-priority, grounded-explanation, and failure-data
+patterns. It adds no cross-project runtime import and no LangChain or LangGraph dependency. See
+[Project 1–4 reuse](docs/project-1-4-reuse.md).
+
 ## Development
 
 ```powershell
@@ -262,5 +288,5 @@ items, a high-severity finding, and an analyst review action.
 - **M0 — Architecture + Due-Diligence Data Models: implemented**
 - **M1/2 — Virtual Data Room Intelligence + RAG: implemented**
 - **M3 — Financial Due Diligence + Quality of Earnings: implemented**
-- **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: planned**
+- **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: implemented**
 - **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: planned**

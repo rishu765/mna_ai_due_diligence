@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ma-due-diligence"
-version = "0.3.0"
-description = "Evidence-first VDR and deterministic financial due-diligence engine."
+version = "0.4.0"
+description = "Evidence-first VDR, financial diligence, and specialist investigation engine."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 madd-vdr-demo = "ma_due_diligence.demo_vdr:main"
 madd-financial-demo = "ma_due_diligence.demo_financial:main"
+madd-specialist-demo = "ma_due_diligence.demo_specialists:main"
 
 [project.optional-dependencies]
 dev = [

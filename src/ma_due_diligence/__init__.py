@@ -20,6 +20,7 @@ from ma_due_diligence.retrieval import (
     RetrievalFilters,
 )
 from ma_due_diligence.serialization import model_from_json, model_to_json
+from ma_due_diligence.specialists import SpecialistCoordinator
 from ma_due_diligence.vdr import IngestionRequest, VdrCorpus, VdrIngestionPipeline, VdrManifest
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "IngestionRequest",
     "RagContextBuilder",
     "RetrievalFilters",
+    "SpecialistCoordinator",
     "VdrDocument",
     "VdrCorpus",
     "VdrIngestionPipeline",
