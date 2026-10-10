@@ -219,10 +219,18 @@ class AdjustmentType(StrEnum):
     ADD_BACK = "add_back"
     NORMALIZATION = "normalization"
     ONE_TIME_EXPENSE = "one_time_expense"
+    NONRECURRING_INCOME = "nonrecurring_income"
     OWNER_COMPENSATION = "owner_compensation"
     NONRECURRING_LEGAL_EXPENSE = "nonrecurring_legal_expense"
+    LITIGATION = "litigation"
+    RESTRUCTURING = "restructuring"
+    PROFESSIONAL_FEES = "professional_fees"
+    ONE_TIME_BONUS = "one_time_bonus"
+    RELATED_PARTY = "related_party"
+    EXCEPTIONAL_ITEM = "exceptional_item"
     RUN_RATE = "run_rate"
     REVENUE_NORMALIZATION = "revenue_normalization"
+    ACCOUNTING_RECLASSIFICATION = "accounting_reclassification"
     OTHER = "other"
 
 
@@ -750,12 +758,17 @@ class FinancialAdjustment:
     analyst_decision: AnalystDecision = AnalystDecision.PENDING
     finding_id: str | None = None
     input_fact_ids: tuple[str, ...] = ()
+    unit: str = "units"
 
     def __post_init__(self) -> None:
         for name in ("adjustment_id", "engagement_id", "affected_metric", "rationale"):
             object.__setattr__(self, name, _text(getattr(self, name), name))
         object.__setattr__(self, "finding_id", _optional_text(self.finding_id, "finding_id"))
         object.__setattr__(self, "input_fact_ids", _unique(self.input_fact_ids, "input_fact_ids"))
+        normalized_unit = _text(self.unit, "adjustment unit").casefold()
+        if normalized_unit not in {"units", "thousand", "million", "billion"}:
+            raise DomainValidationError("adjustment unit is unsupported")
+        object.__setattr__(self, "unit", normalized_unit)
         if (
             self.verification_status
             in {

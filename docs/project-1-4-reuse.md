@@ -44,3 +44,14 @@ independent and repository instructions prohibit private implementation coupling
 Project 5 adds diligence-specific CSV/XLSX provenance, primary/secondary workstreams, engagement
 isolation, document versions, cross-document grouping, and bounded context construction. LangChain
 was inspected as an option and was not used because it adds no necessary behavior here.
+
+## M3 implementation update
+
+Project 3's exact `Decimal` arithmetic, explicit units, ISO-style currencies, period labels,
+actual/estimate status, reported/adjusted basis, safe ratio behavior, and calculation traces were
+adapted locally behind Project 5 financial models. No valuation assumptions or private Project 3
+module imports were added.
+
+Project 4's source hierarchy, retained conflicting observations, explicit verification status,
+evidence lineage, and review-ready ambiguity were adapted for financial reconciliation and
+candidate findings. M3 does not import Project 4 internals or add its LangGraph runtime.

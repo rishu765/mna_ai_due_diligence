@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ma-due-diligence"
-version = "0.2.0"
-description = "Evidence-first virtual data room intelligence for auditable M&A due diligence."
+version = "0.3.0"
+description = "Evidence-first VDR and deterministic financial due-diligence engine."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 madd-vdr-demo = "ma_due_diligence.demo_vdr:main"
+madd-financial-demo = "ma_due_diligence.demo_financial:main"
 
 [project.optional-dependencies]
 dev = [
@@ -41,6 +42,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

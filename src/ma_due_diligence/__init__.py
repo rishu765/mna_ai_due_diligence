@@ -10,6 +10,7 @@ from ma_due_diligence.domain import (
     FinancialAdjustment,
     VdrDocument,
 )
+from ma_due_diligence.financial import FinancialMetric, FinancialObservation
 from ma_due_diligence.fixtures import build_synthetic_fixture
 from ma_due_diligence.retrieval import (
     DeterministicHashEmbedder,
@@ -29,6 +30,8 @@ __all__ = [
     "DiligenceSummary",
     "EvidenceReference",
     "FinancialAdjustment",
+    "FinancialMetric",
+    "FinancialObservation",
     "DeterministicHashEmbedder",
     "HybridDiligenceRetriever",
     "InMemoryDiligenceIndex",

@@ -15,8 +15,10 @@ deterministic adjustments, and preparing an auditable diligence report for human
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
-evaluation, and a reproducible demo. It does not calculate QoE, run specialist agents or LangGraph,
-expose an API, or generate a final report.
+evaluation, and a reproducible demo. M3 adds evidence-bound financial observations, source
+reconciliation, QoE adjustment assessment, EBITDA, working-capital and net-debt bridges, financial
+findings, evaluation, and an offline demo. Specialist agents, LangGraph, API, and final reporting
+remain later milestones.
 
 ## M&A Due-Diligence Workflow
 
@@ -48,8 +50,32 @@ Frozen dataclasses and string enums form the provider-neutral domain. Narrow pro
 future provider and analyzer boundaries. Schema-versioned serialization retains enums, `Decimal`,
 dates, timestamps, and tuples. The future graph state is a typed contract only.
 
-M1/2 implements the left side of this flow through evidence retrieval. Conclusions, adjustments,
-and review remain later milestones.
+M1/2 implements the left side through evidence retrieval. M3 implements deterministic financial
+analysis and candidate financial findings. Specialist conclusions and review remain later work.
+
+## Financial Due Diligence and Quality of Earnings
+
+M3 retrieves financial evidence through M1/2 and retains metric, value, currency, unit, period,
+actual/forecast status, reported/adjusted basis, source, evidence, and support status in typed
+observations. A deterministic extractor is available offline, with a validated optional provider
+boundary for LLM candidates.
+
+Source reconciliation preserves audited, management, board, presentation, sales, debt, and bank
+observations instead of overwriting disagreements. The visible source-priority policy is
+configurable by metric. Period and currency mismatches remain unresolved without implicit FY/LTM
+or FX conversion.
+
+QoE rules assess recurring add-backs, duplicates, missing evidence, and unrealized run-rate items.
+Only accepted adjustments enter the deterministic reported-to-diligence-adjusted EBITDA bridge.
+Other deterministic services calculate revenue growth, gross and EBITDA margins, customer
+concentration, historical NWC, indicative NWC peg, and adjusted net debt while preserving complete
+calculation lines.
+
+Candidate financial findings cover material revenue discrepancies, concentration, repeated
+one-time items, working-capital volatility, and restricted cash. See
+[Financial diligence and QoE](docs/financial-diligence-qoe.md).
+
+Run `madd-financial-demo` for the end-to-end offline M3 demonstration.
 
 ## VDR Ingestion
 
@@ -235,6 +261,6 @@ items, a high-severity finding, and an analyst review action.
 
 - **M0 — Architecture + Due-Diligence Data Models: implemented**
 - **M1/2 — Virtual Data Room Intelligence + RAG: implemented**
-- **M3 — Financial Due Diligence + Quality of Earnings: planned**
+- **M3 — Financial Due Diligence + Quality of Earnings: implemented**
 - **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: planned**
 - **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: planned**
