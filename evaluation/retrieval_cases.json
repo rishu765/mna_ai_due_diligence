@@ -1,0 +1,50 @@
+{
+  "dataset": "northstar-vdr-m12",
+  "cases": [
+    {
+      "case_id": "revenue-cross-document",
+      "category": "narrative",
+      "query": "What do the audited accounts, management accounts, sales report and management presentation say about FY2025 revenue?",
+      "expected_sources": ["01_audited_financial_statements_FY2025.pdf", "02_monthly_management_accounts_FY2025.xlsx", "03_customer_sales_report_FY2025.csv", "08_management_presentation_v1.md"]
+    },
+    {
+      "case_id": "customer-concentration",
+      "category": "table",
+      "query": "Which customers represent more than 10% of revenue?",
+      "expected_sources": ["03_customer_sales_report_FY2025.csv"],
+      "document_types": ["sales_report"]
+    },
+    {
+      "case_id": "change-control",
+      "category": "narrative",
+      "query": "Are there change of control termination clauses?",
+      "expected_sources": ["04_apex_customer_contract.txt"],
+      "workstreams": ["legal_contractual"]
+    },
+    {
+      "case_id": "debt",
+      "category": "table",
+      "query": "What debt instruments and covenants are outstanding?",
+      "expected_sources": ["06_debt_schedule_FY2025.csv"],
+      "document_types": ["debt_schedule"]
+    },
+    {
+      "case_id": "ebitda-adjustment",
+      "category": "narrative",
+      "query": "What EBITDA adjustments does management propose?",
+      "expected_sources": ["08_management_presentation_v1.md", "08_management_presentation_v2_revised.md"]
+    },
+    {
+      "case_id": "supplier-dependency",
+      "category": "narrative",
+      "query": "What are the major sole-source supplier dependencies?",
+      "expected_sources": ["05_orion_supplier_contract.md"]
+    },
+    {
+      "case_id": "litigation",
+      "category": "narrative",
+      "query": "Which documents mention litigation or contingent liability?",
+      "expected_sources": ["09_board_memo.html"]
+    }
+  ]
+}

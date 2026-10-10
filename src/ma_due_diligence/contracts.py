@@ -24,12 +24,16 @@ class DocumentClassification:
     document_type: DocumentType
     workstreams: tuple[DiligenceWorkstream, ...]
     rationale: str
+    primary_workstream: DiligenceWorkstream | None = None
+    ambiguous: bool = False
 
     def __post_init__(self) -> None:
         if not self.document_id.strip() or not self.rationale.strip():
             raise DomainValidationError("classification requires document ID and rationale")
         if not self.workstreams or len(set(self.workstreams)) != len(self.workstreams):
             raise DomainValidationError("classification workstreams must be non-empty and unique")
+        if self.primary_workstream is not None and self.primary_workstream not in self.workstreams:
+            raise DomainValidationError("primary workstream must be in workstreams")
 
 
 @dataclass(frozen=True, slots=True)

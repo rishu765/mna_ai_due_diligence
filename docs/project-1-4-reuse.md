@@ -32,3 +32,15 @@ the contracts. There is no integration claim.
 Provider implementations, vector indexes, retrieval algorithms, valuation engines, APIs, and
 LangGraph runtimes are not reused in M0 because they belong to later milestones or carry the wrong
 transaction-specific behavior.
+
+## M1/2 implementation update
+
+Project 1's normalization, page/index provenance, chunk identity, embedding protocol, and semantic
+retrieval shapes were adapted into Project 5's VDR context. Project 4's HTML/text ingestion,
+deterministic embeddings, BM25, weighted hybrid fusion, metadata filters, atomic index update, and
+warning patterns were adapted. No direct Project 1–4 import was added because their packages remain
+independent and repository instructions prohibit private implementation coupling.
+
+Project 5 adds diligence-specific CSV/XLSX provenance, primary/secondary workstreams, engagement
+isolation, document versions, cross-document grouping, and bounded context construction. LangChain
+was inspected as an option and was not used because it adds no necessary behavior here.

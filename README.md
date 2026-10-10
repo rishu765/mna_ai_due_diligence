@@ -13,8 +13,10 @@ Project 5 will become an evidence-first assistant for investigating a target-com
 room, organizing materials, finding conflicts and gaps, supporting specialist analysis, quantifying
 deterministic adjustments, and preparing an auditable diligence report for human approval.
 
-M0 implements only the typed domain and architectural foundation. It does not ingest production
-documents, call an LLM, calculate QoE, run LangGraph, expose an API, or generate a report.
+M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
+chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
+evaluation, and a reproducible demo. It does not calculate QoE, run specialist agents or LangGraph,
+expose an API, or generate a final report.
 
 ## M&A Due-Diligence Workflow
 
@@ -45,6 +47,88 @@ flowchart LR
 Frozen dataclasses and string enums form the provider-neutral domain. Narrow protocols reserve
 future provider and analyzer boundaries. Schema-versioned serialization retains enums, `Decimal`,
 dates, timestamps, and tuples. The future graph state is a typed contract only.
+
+M1/2 implements the left side of this flow through evidence retrieval. Conclusions, adjustments,
+and review remain later milestones.
+
+## VDR Ingestion
+
+`VdrIngestionPipeline` accepts a folder, an explicit file list, or a typed/JSON manifest. Each file
+is hashed, parsed, classified, chunked, and added independently so a corrupt or unsupported file
+does not discard the usable corpus. The corpus remains tied to one engagement.
+
+Supported formats are PDF, UTF-8 TXT/Markdown, CSV, XLSX, and basic HTML. PDF parsing uses PyMuPDF;
+XLSX parsing uses openpyxl; the other parsers use the Python standard library. OCR, legacy `.xls`,
+images, archives, and macros are outside M1/2.
+
+## Classification and Metadata
+
+The offline classifier applies visible filename/title/content phrase rules to the M0 document
+taxonomy and assigns one primary workstream plus ordered secondary workstreams. A manifest can
+override type and workstreams. Ambiguous unmatched documents remain `OTHER` instead of receiving
+invented certainty.
+
+Documents retain title, filename, absolute source path, checksum, type, workstreams, entity and
+period when supplied/inferred, version markers, retrieval timestamp, confidentiality, format, and
+parse status.
+
+## Table and Spreadsheet Handling
+
+CSV and XLSX rows remain atomic parsed elements. Chunks retain table ID, sheet name, row number,
+cell range, and header context. XLSX ingestion reads displayed values with `data_only=True`; it does
+not evaluate formulas, reconstruct formatting, or provide a full Excel engine. PDF table handling
+is intentionally heuristic and does not attempt OCR or geometric table reconstruction.
+
+## Diligence-Aware Chunking
+
+Narrative paragraphs, headings, contract clauses, PDF table-like rows, CSV rows, and spreadsheet
+rows are represented separately. Contract clause numbers and section headings remain attached.
+Table rows include their headers so periods and numeric values stay together. Every chunk carries
+engagement, document, type, workstreams, pages/indexes, section, clause, table/sheet/range, period,
+entity, source path, and a deterministic content fingerprint.
+
+## Semantic, Lexical, and Hybrid Retrieval
+
+The offline `DeterministicHashEmbedder` provides normalized feature-hashing vectors for tests and
+the demo. It is a replaceable semantic-retrieval boundary, not a production embedding model.
+
+Lexical search uses BM25 over normalized tokens and phrase bigrams. Hybrid retrieval combines
+nonnegative cosine similarity and max-normalized BM25 using transparent weights: 55% semantic and
+45% lexical. Deterministic score and chunk-ID ordering resolves ties.
+
+Filters support engagement, document ID, document type, workstream, period, entity, page, and sheet.
+Engagement filtering is mandatory. Cross-document retrieval groups evidence by source without
+selecting an authoritative value.
+
+## Retrieval Signals and RAG Context
+
+Responses can flag no evidence, weak matches, single-source support, conflicting contexts, stale
+period filters, wrong-workstream filters, duplicate evidence, and corpus parse failures. These are
+review signals rather than confidence percentages.
+
+`RagContextBuilder` retrieves, deduplicates, applies filters, preserves citations, and fits evidence
+into a character budget. M1/2 does not generate an answer; later extraction and analysis consume
+this grounded context.
+
+## Index Lifecycle and Versions
+
+The lifecycle is `ingest -> parse -> classify -> chunk -> index -> retrieve`. Index updates validate
+all pending vectors before mutation and support explicit rebuilding. SHA-256 detects renamed exact
+duplicates, which are recorded and skipped. Distinct `v1`, `v2`, `revised`, `draft`, and `final`
+documents remain available and are grouped as versions rather than overwritten.
+
+## Retrieval Evaluation
+
+The seven-case synthetic benchmark covers narrative and table evidence. Current offline results at
+K=5 are Hit@5 `1.000`, Recall@5 `0.929`, MRR `0.857`, source correctness `0.714`, metadata-filter
+correctness `1.000`, and narrative/table Hit@5 `1.000`. This tiny fixture benchmark validates
+plumbing and regression behavior; it does not establish production retrieval quality.
+
+## Offline Demo
+
+Run `madd-vdr-demo`. It generates the fictitious VDR, ingests and indexes it, retrieves revenue,
+customer, contract, debt, and EBITDA-adjustment evidence, groups unresolved revenue contexts by
+source, builds bounded RAG context, demonstrates insufficient evidence, and runs the benchmark.
 
 ## Workstreams
 
@@ -127,6 +211,11 @@ M0 has no runtime imports from Projects 1–4. Those are independent packages wi
 API. Project 5 adapts their proven patterns inside its own bounded context and exposes protocols for
 later adapters. See [Project 1–4 reuse](docs/project-1-4-reuse.md).
 
+M1/2 adapts Project 1's conservative normalization, page/index provenance, provider-neutral
+embedding boundary, and retrieval contracts. It adapts Project 4's BM25, weighted hybrid fusion,
+metadata filters, atomic index updates, and quality warnings. No private cross-project module is
+imported. See [VDR intelligence and RAG](docs/vdr-intelligence-rag.md).
+
 ## Development
 
 ```powershell
@@ -145,7 +234,7 @@ items, a high-severity finding, and an analyst review action.
 ## Roadmap
 
 - **M0 — Architecture + Due-Diligence Data Models: implemented**
-- **M1/2 — Virtual Data Room Intelligence + RAG: planned**
+- **M1/2 — Virtual Data Room Intelligence + RAG: implemented**
 - **M3 — Financial Due Diligence + Quality of Earnings: planned**
 - **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: planned**
 - **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: planned**

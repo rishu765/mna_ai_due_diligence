@@ -506,6 +506,8 @@ class EvidenceReference:
     table: str | None = None
     row: str | None = None
     column: str | None = None
+    sheet_name: str | None = None
+    cell_range: str | None = None
     chunk_id: str | None = None
     source_text: str | None = None
     span_start: int | None = None
@@ -534,6 +536,8 @@ class EvidenceReference:
             "table",
             "row",
             "column",
+            "sheet_name",
+            "cell_range",
             "chunk_id",
             "source_text",
             "retrieval_context",
