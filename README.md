@@ -9,8 +9,8 @@ analyst decisions. A document summary alone cannot do that.
 
 ## Project Goal
 
-Project 5 will become an evidence-first assistant for investigating a target-company virtual data
-room, organizing materials, finding conflicts and gaps, supporting specialist analysis, quantifying
+Project 5 is an evidence-first assistant for investigating a target-company virtual data room,
+organizing materials, finding conflicts and gaps, supporting specialist analysis, quantifying
 deterministic adjustments, and preparing an auditable diligence report for human approval.
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
@@ -19,7 +19,8 @@ evaluation, and a reproducible demo. M3 adds evidence-bound financial observatio
 reconciliation, QoE adjustment assessment, EBITDA, working-capital and net-debt bridges, financial
 findings, evaluation, and an offline demo. M4/5 adds evidence-bound specialist analyzers,
 cross-document investigation, finding consolidation, compound risks, and information requests.
-LangGraph, final human review, API, and final reporting remain later milestones.
+M6/7 completes the checkpointed LangGraph workflow, focused analyst review, evidence-linked report,
+final evaluation, offline demonstration, and local FastAPI interface.
 
 ## M&A Due-Diligence Workflow
 
@@ -40,11 +41,10 @@ flowchart LR
     G --> H[Findings / Adjustments / Missing Info]
     H --> I[Human Review]
     I --> J[Diligence Report]
-    M0[M0: foundation only] -. typed contracts .-> A
-    M0 -. typed contracts .-> D
-    M0 -. typed contracts .-> H
-    M0 -. typed contracts .-> I
-    M0 -. typed contracts .-> J
+    K[M0-M5: domain and analysis services] -. called by .-> L[M6/7 LangGraph workflow]
+    L -. checkpoints and routes .-> C
+    L -. pauses at .-> I
+    L -. validates .-> J
 ```
 
 Frozen dataclasses and string enums form the provider-neutral domain. Narrow protocols reserve
@@ -53,7 +53,33 @@ dates, timestamps, and tuples. The future graph state is a typed contract only.
 
 M1/2 implements the left side through evidence retrieval. M3 implements deterministic financial
 analysis and candidate financial findings. M4/5 implements specialist conclusions and
-cross-document investigation. Final orchestration and review remain later work.
+cross-document investigation. M6/7 composes these existing services as thin graph nodes; business
+rules and financial arithmetic remain outside the graph.
+
+## Final Workflow, Review, Report, and API
+
+The M6/7 workflow validates the engagement, ingests the VDR, builds the hybrid index, retrieves
+core evidence, runs M3 finance, runs the M4/5 coordinator, decides whether analyst review is
+required, applies immutable review decisions, prioritizes findings, generates the report, evaluates
+the run, and records a terminal result. A trusted process-local checkpoint store supports the
+offline proof of concept. One specialist failure is retained as data while other results continue.
+
+Review is required for unresolved conflicts, critical or high uncertain findings, compound risks,
+and urgent or blocking missing information. The analyst can approve or reject a finding, change
+severity, mark it nonmaterial, resolve a conflict, or request more evidence. Every applied action
+retains the reviewer, rationale, timestamp, prior state, and resulting state. A request for more
+evidence ends in `waiting_for_information` without creating a final report.
+
+Report priority is deterministic and visible: severity first, then key deal impact, then support
+ambiguity, with stable finding-ID tie breaking. The report contains an executive summary, red
+flags, four workstream sections, QoE, working capital, net debt, conflicts, missing information,
+requests, review decisions, and limitations. Numerical summaries are copied from M3 outputs and
+validated before release. Findings cite their original evidence references.
+
+The local FastAPI proof of concept provides health, fixture-run creation, run status, review
+submission, and report retrieval endpoints. It requires no credentials. Run `madd-agent-demo` for an
+offline pause/resume demonstration, `madd-evaluate` for the 14-scenario evaluation, or `madd-api`
+for the API. See [Final agent architecture](docs/final-agent-architecture.md).
 
 ## Specialist Diligence and Investigation
 
@@ -232,9 +258,9 @@ retain responses with evidence.
 ## Human Review
 
 `HumanReviewAction` records reviewer, action, rationale, timezone-aware timestamp, subject, prior
-state, and resulting state. Actions cover finding approval/rejection, severity changes, adjustment
-decisions, conflict resolution, nonmaterial conclusions, and requests for more evidence. M0 does
-not implement the interactive workflow.
+state, and resulting state. M6/7 applies finding approval/rejection, severity changes, conflict
+resolution, nonmaterial conclusions, and requests for more evidence through a real checkpointed
+pause/resume boundary. Adjustment actions remain in the M0 contract for later data-source adapters.
 
 ## Report / Summary Contracts
 
@@ -252,6 +278,13 @@ outputs remain candidates tied to evidence and review status.
 Deterministic Python will own arithmetic, normalization, reconciliation, QoE, working-capital and
 net-debt calculations, thresholds, rule-based checks, and explicit severity/materiality policies.
 The LLM will not be the authoritative calculator.
+
+## LangChain vs LangGraph
+
+LangGraph is used for durable-in-process state transitions, conditional routing, bounded retry
+loops, checkpointing, and the real analyst interrupt/resume boundary. LangChain is not used as a
+general orchestration layer. Project 5 keeps provider protocols and retrieval services small and
+framework-neutral; the offline V1 requires no live model.
 
 ## Relationship to Projects 1–4
 
@@ -289,4 +322,6 @@ items, a high-severity finding, and an analyst review action.
 - **M1/2 — Virtual Data Room Intelligence + RAG: implemented**
 - **M3 — Financial Due Diligence + Quality of Earnings: implemented**
 - **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: implemented**
-- **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: planned**
+- **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: implemented**
+
+**Project 5 Version 1.0 is complete.**
