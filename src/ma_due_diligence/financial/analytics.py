@@ -226,6 +226,16 @@ def analyze_nwc_trend(periods: tuple[WorkingCapitalPeriod, ...]) -> WorkingCapit
         )
     if not known:
         return WorkingCapitalTrend(results, None, None, None, (), tuple(warnings))
+    basis_warnings = _nwc_basis_warnings(results)
+    if basis_warnings:
+        return WorkingCapitalTrend(
+            results,
+            None,
+            None,
+            None,
+            (),
+            tuple(warnings) + basis_warnings,
+        )
     average = sum(known, Decimal("0")) / Decimal(len(known))
     midpoint = Decimal(str(median(known)))
     recent = known[-1]
@@ -262,6 +272,23 @@ def calculate_nwc_peg(
                 ),
             ),
         )
+    basis_warnings = _nwc_basis_warnings(known)
+    if basis_warnings:
+        prior_warnings = tuple(
+            warning
+            for warning in trend.warnings
+            if warning.code not in {item.code for item in basis_warnings}
+        )
+        return NwcPegResult(
+            method,
+            tuple(item.period.label for item in known),
+            None,
+            None,
+            None,
+            known[0].currency,
+            known[0].unit,
+            prior_warnings + basis_warnings,
+        )
     values = [item.net_working_capital for item in known]
     assert all(value is not None for value in values)
     normalized: Decimal | None
@@ -296,3 +323,27 @@ def calculate_nwc_peg(
         known[0].unit,
         warnings,
     )
+
+
+def _nwc_basis_warnings(
+    results: tuple[WorkingCapitalResult, ...] | list[WorkingCapitalResult],
+) -> tuple[CalculationWarning, ...]:
+    known = tuple(item for item in results if item.net_working_capital is not None)
+    if not known:
+        return ()
+    warnings: list[CalculationWarning] = []
+    if len({item.currency for item in known}) > 1:
+        warnings.append(
+            CalculationWarning(
+                CalculationWarningCode.MIXED_CURRENCIES,
+                "NWC history contains multiple currencies and cannot be aggregated.",
+            )
+        )
+    if len({item.unit for item in known}) > 1:
+        warnings.append(
+            CalculationWarning(
+                CalculationWarningCode.MIXED_UNITS,
+                "NWC history contains multiple units and cannot be aggregated.",
+            )
+        )
+    return tuple(warnings)

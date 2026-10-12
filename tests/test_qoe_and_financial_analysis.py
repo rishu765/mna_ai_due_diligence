@@ -21,6 +21,7 @@ from ma_due_diligence.financial.fixtures import ENGAGEMENT_ID, build_financial_f
 from ma_due_diligence.financial.models import (
     CalculationWarningCode,
     FinancialMetric,
+    FinancialUnit,
     MarginResult,
     NwcPegMethod,
 )
@@ -148,6 +149,40 @@ def test_missing_nwc_component_remains_unknown() -> None:
     result = calculate_nwc(build_financial_fixture_case().working_capital[8])
     assert result.net_working_capital is None
     assert result.warnings[0].code is CalculationWarningCode.MISSING_INPUT
+
+
+def test_nwc_trend_and_peg_fail_closed_for_mixed_currencies() -> None:
+    periods = build_financial_fixture_case().working_capital[:2]
+    mixed = (periods[0], replace(periods[1], currency="USD"))
+
+    trend = analyze_nwc_trend(mixed)
+    peg = calculate_nwc_peg(trend, NwcPegMethod.TRAILING_AVERAGE)
+
+    assert trend.average is None
+    assert trend.median is None
+    assert trend.recent_variance_from_average is None
+    assert {warning.code for warning in trend.warnings} == {CalculationWarningCode.MIXED_CURRENCIES}
+    assert peg.normalized_nwc is None
+    assert peg.current_nwc is None
+    assert peg.surplus_or_shortfall is None
+    assert {warning.code for warning in peg.warnings} == {CalculationWarningCode.MIXED_CURRENCIES}
+
+
+def test_nwc_trend_and_peg_fail_closed_for_mixed_units() -> None:
+    periods = build_financial_fixture_case().working_capital[:2]
+    mixed = (periods[0], replace(periods[1], unit=FinancialUnit.THOUSAND))
+
+    trend = analyze_nwc_trend(mixed)
+    peg = calculate_nwc_peg(trend, NwcPegMethod.MEDIAN)
+
+    assert trend.average is None
+    assert trend.median is None
+    assert trend.recent_variance_from_average is None
+    assert {warning.code for warning in trend.warnings} == {CalculationWarningCode.MIXED_UNITS}
+    assert peg.normalized_nwc is None
+    assert peg.current_nwc is None
+    assert peg.surplus_or_shortfall is None
+    assert {warning.code for warning in peg.warnings} == {CalculationWarningCode.MIXED_UNITS}
 
 
 def test_adjusted_net_debt_excludes_restricted_cash() -> None:

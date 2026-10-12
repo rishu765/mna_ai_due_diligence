@@ -96,6 +96,7 @@ class CalculationWarningCode(StrEnum):
     ZERO_DENOMINATOR = "zero_denominator"
     PERIOD_MISMATCH = "period_mismatch"
     MIXED_CURRENCIES = "mixed_currencies"
+    MIXED_UNITS = "mixed_units"
     CONFLICTING_VALUES = "conflicting_values"
     INCOMPLETE_HISTORY = "incomplete_history"
     DUPLICATE_ITEM = "duplicate_item"
