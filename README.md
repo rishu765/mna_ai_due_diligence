@@ -325,3 +325,14 @@ items, a high-severity finding, and an analyst review action.
 - **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: implemented**
 
 **Project 5 Version 1.0 is complete.**
+
+## Portfolio quick reference
+
+| Topic | V1 answer |
+| --- | --- |
+| Business problem | Find, quantify, review, and report material VDR risks with evidence |
+| Inputs / outputs | Engagement plus VDR files → calculations, findings, conflicts, review decisions, report |
+| AI / M&A concepts | Hybrid RAG, specialist agents, LangGraph/HITL / QoE, EBITDA, NWC, net debt |
+| Demo / tests / evaluation | `madd-agent-demo`; commands above; 14 deterministic scenarios |
+| Relationship | Supplies diligence finance, risks, and evidence to P6 through a native-local adapter |
+| Limitation | Synthetic VDR, bounded workstreams, trusted local checkpoints, no production confidentiality controls |
