@@ -18,6 +18,8 @@ The immutable standalone V1 baseline is recorded in
 [Pilot Implementation Plan](docs/PILOT_IMPLEMENTATION_PLAN.md) and
 [Pilot Scope](docs/PILOT_SCOPE.md). V1 remains a tested portfolio prototype; these pilot documents
 do not represent a claim of enterprise production readiness.
+The proposed finance-reviewer journey and screen contracts are documented in
+[Pilot UX and Wireframes](docs/PILOT_UX.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
