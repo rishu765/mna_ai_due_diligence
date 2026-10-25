@@ -196,7 +196,7 @@ def test_database_persists_deal_document_run_artifact_and_audit(tmp_path: Path) 
     database.append_audit_event(audit)
 
     reopened = PilotDatabase(database_path)
-    assert reopened.schema_version() == 1
+    assert reopened.schema_version() == 2
     assert reopened.get_deal(deal.deal_id) == deal
     assert reopened.get_document(deal.deal_id, document.document_id) == document
     assert reopened.get_run(deal.deal_id, run.run_id) == run

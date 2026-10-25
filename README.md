@@ -22,6 +22,8 @@ The proposed finance-reviewer journey and screen contracts are documented in
 [Pilot UX and Wireframes](docs/PILOT_UX.md).
 The Step 4 persistence boundary and its security assumptions are documented in
 [Pilot Persistence and Encrypted Document Storage](docs/PILOT_STORAGE.md).
+The Step 5 identity, session, role, permission, and isolation model is documented in
+[Pilot Authentication and Deal Isolation](docs/PILOT_SECURITY.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
