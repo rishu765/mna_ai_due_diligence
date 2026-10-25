@@ -3,6 +3,16 @@
 This sequence is the locked implementation order. A later stage does not start implicitly; each
 stage must meet its exit criteria and preserve the V1 evidence and review guarantees.
 
+## Progress tracker
+
+| Step | Workstream | Status |
+| --- | --- | --- |
+| 1 | Freeze V1 | Complete |
+| 2 | Lock pilot scope and acceptance criteria | Complete; company-specific constraints remain configurable |
+| 3 | Design the user journey and wireframes | Complete |
+| 4 | Add database and secure document storage | Next |
+| 5–17 | Remaining locked sequence below | Not started |
+
 ## 1. Freeze V1
 
 - Tag and record the verified baseline.
