@@ -122,6 +122,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .financial-value { padding: 19px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .financial-value span { color: var(--ink-soft); font-size: 12px; }
 .financial-value strong { display: block; margin-top: 8px; font-family: Georgia, "Times New Roman", serif; font-size: 27px; font-weight: 400; }
+.methodology-list { display: grid; gap: 9px; }
+.methodology-rule { border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.methodology-rule summary { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 12px; padding: 14px; cursor: pointer; }
+.methodology-rule summary span { color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.methodology-rule > p, .methodology-rule > .calculation-lines { margin: 0; padding: 0 14px 14px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; }
+.calculation-lines > div { display: flex; justify-content: space-between; gap: 15px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.calculation-lines small { display: block; margin-top: 3px; color: var(--ink-soft); }
 .report-section { padding: 20px 0; border-bottom: 1px solid var(--line); }
 .report-section:last-child { border-bottom: 0; }
 .report-section h3 { font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 400; }

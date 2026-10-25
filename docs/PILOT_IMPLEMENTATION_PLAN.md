@@ -14,8 +14,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 5 | Implement authentication and deal isolation | Complete |
 | 6 | Build the minimum UI | Complete |
 | 7 | Strengthen document processing | Complete |
-| 8 | Formalize financial methodologies | Next |
-| 9–17 | Remaining locked sequence below | Not started |
+| 8 | Formalize financial methodologies | Complete |
+| 9 | Connect review actions and audit history | Next |
+| 10–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -80,6 +81,11 @@ the synthetic analysis run until the later controlled-AI/retrieval integration i
   missing-data behavior.
 
 Exit: a finance reviewer can independently reproduce and challenge every released calculation.
+
+Implemented through the versioned policy and deal-specific calculation traces documented in
+[`PILOT_FINANCIAL_METHODOLOGY.md`](PILOT_FINANCIAL_METHODOLOGY.md). The UI exposes signed lines,
+source/evidence IDs, assumptions, thresholds, reviewer challenge questions, and reconciliation checks
+without changing V1 arithmetic.
 
 ## 9. Connect review actions and audit history
 

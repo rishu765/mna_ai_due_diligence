@@ -106,12 +106,19 @@ def test_api_hides_unassigned_deals_even_when_id_is_known(tmp_path: Path) -> Non
     visible = client.get("/pilot/deals", headers=_headers(token))
     assigned = client.get("/pilot/deals/deal-a", headers=_headers(token))
     unassigned = client.get("/pilot/deals/deal-b", headers=_headers(token))
+    methodology = client.get("/pilot/deals/deal-a/financial-methodology", headers=_headers(token))
+    hidden_methodology = client.get(
+        "/pilot/deals/deal-b/financial-methodology", headers=_headers(token)
+    )
 
     assert visible.status_code == 200
     assert [item["deal_id"] for item in visible.json()] == ["deal-a"]
     assert assigned.status_code == 200
     assert unassigned.status_code == 404
     assert unassigned.json()["detail"] == "deal not found"
+    assert methodology.status_code == 200
+    assert methodology.json()["engagement_assumptions"]["reporting_currency"] == "GBP"
+    assert hidden_methodology.status_code == 404
 
 
 def test_non_admin_cannot_create_deals_or_assign_memberships(tmp_path: Path) -> None:

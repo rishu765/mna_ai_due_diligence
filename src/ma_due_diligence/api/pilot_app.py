@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, 
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from ma_due_diligence.financial.methodology import engagement_methodology_payload
 from ma_due_diligence.persistence import PilotDatabase, PilotDealRecord
 from ma_due_diligence.security import (
     AuthenticationError,
@@ -162,6 +163,27 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         if deal is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="deal not found")
         return _deal_payload(deal)
+
+    @app.get("/pilot/deals/{deal_id}/financial-methodology")
+    def get_financial_methodology(
+        deal_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object]:
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        deal = context.database.get_deal(deal_id)
+        if deal is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="deal not found")
+        return engagement_methodology_payload(
+            reporting_currency=deal.reporting_currency,
+            unit=deal.unit,
+            as_of_date=deal.as_of_date.isoformat(),
+            materiality_threshold=deal.materiality_threshold,
+        )
 
     @app.put(
         "/pilot/deals/{deal_id}/memberships",
