@@ -10,6 +10,14 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import cast
 
+from ma_due_diligence.security.models import (
+    DealMembership,
+    DealRole,
+    PilotUser,
+    SessionRecord,
+    UserStatus,
+)
+
 from .models import (
     ArtifactKind,
     DealStatus,
@@ -22,7 +30,7 @@ from .models import (
     StoredDocumentStatus,
 )
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS pilot_schema_migrations (
@@ -115,6 +123,47 @@ CREATE INDEX IF NOT EXISTS idx_pilot_audit_deal_sequence
 ON pilot_audit_events(deal_id, sequence);
 """
 
+_SCHEMA_V2 = """
+CREATE TABLE IF NOT EXISTS pilot_users (
+    user_id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name TEXT NOT NULL,
+    password_hash TEXT,
+    status TEXT NOT NULL,
+    is_pilot_admin INTEGER NOT NULL CHECK (is_pilot_admin IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pilot_deal_memberships (
+    deal_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    assigned_by TEXT NOT NULL,
+    assigned_at TEXT NOT NULL,
+    PRIMARY KEY (deal_id, user_id),
+    FOREIGN KEY (deal_id) REFERENCES pilot_deals(deal_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES pilot_users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pilot_memberships_user
+ON pilot_deal_memberships(user_id, deal_id);
+
+CREATE TABLE IF NOT EXISTS pilot_sessions (
+    session_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_sha256 TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    revoked_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES pilot_users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pilot_sessions_user_expiry
+ON pilot_sessions(user_id, expires_at);
+"""
+
 
 class PersistenceConflictError(RuntimeError):
     """Raised when an identifier already belongs to another persisted object."""
@@ -134,6 +183,12 @@ class PilotDatabase:
     def initialize(self) -> None:
         with self._connection() as connection:
             connection.executescript(_SCHEMA_V1)
+            connection.execute(
+                "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
+                "VALUES (?, datetime('now'))",
+                (1,),
+            )
+            connection.executescript(_SCHEMA_V2)
             connection.execute(
                 "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
                 "VALUES (?, datetime('now'))",
@@ -186,6 +241,197 @@ class PilotDatabase:
                 (deal_id,),
             ).fetchone()
         return None if row is None else _deal_from_row(row)
+
+    def list_deals_for_user(self, user_id: str) -> tuple[PilotDealRecord, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT deals.* FROM pilot_deals AS deals
+                JOIN pilot_deal_memberships AS memberships
+                  ON memberships.deal_id = deals.deal_id
+                WHERE memberships.user_id = ?
+                ORDER BY deals.updated_at DESC, deals.deal_id
+                """,
+                (user_id,),
+            ).fetchall()
+        return tuple(_deal_from_row(row) for row in rows)
+
+    def list_deals(self) -> tuple[PilotDealRecord, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM pilot_deals ORDER BY updated_at DESC, deal_id"
+            ).fetchall()
+        return tuple(_deal_from_row(row) for row in rows)
+
+    def create_user(self, user: PilotUser) -> None:
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO pilot_users (
+                        user_id, email, display_name, password_hash, status,
+                        is_pilot_admin, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user.user_id,
+                        user.email,
+                        user.display_name,
+                        user.password_hash,
+                        user.status.value,
+                        int(user.is_pilot_admin),
+                        user.created_at.isoformat(),
+                        user.updated_at.isoformat(),
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError(f"user or email already exists: {user.email}") from error
+
+    def get_user(self, user_id: str) -> PilotUser | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM pilot_users WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return None if row is None else _user_from_row(row)
+
+    def get_user_by_email(self, email: str) -> PilotUser | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM pilot_users WHERE email = ? COLLATE NOCASE",
+                (email.casefold(),),
+            ).fetchone()
+        return None if row is None else _user_from_row(row)
+
+    def update_user_password_hash(
+        self,
+        user_id: str,
+        password_hash: str,
+        updated_at: datetime,
+    ) -> None:
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE pilot_users
+                SET password_hash = ?, updated_at = ?
+                WHERE user_id = ? AND status = ?
+                """,
+                (password_hash, updated_at.isoformat(), user_id, UserStatus.ACTIVE.value),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"active user not found: {user_id}")
+
+    def set_user_status(
+        self,
+        user_id: str,
+        status: UserStatus,
+        updated_at: datetime,
+    ) -> None:
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE pilot_users SET status = ?, updated_at = ? WHERE user_id = ?",
+                (status.value, updated_at.isoformat(), user_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"user not found: {user_id}")
+            if status is UserStatus.DEACTIVATED:
+                connection.execute(
+                    """
+                    UPDATE pilot_sessions
+                    SET revoked_at = COALESCE(revoked_at, ?)
+                    WHERE user_id = ?
+                    """,
+                    (updated_at.isoformat(), user_id),
+                )
+
+    def assign_deal_membership(self, membership: DealMembership) -> None:
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO pilot_deal_memberships (
+                        deal_id, user_id, role, assigned_by, assigned_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(deal_id, user_id) DO UPDATE SET
+                        role = excluded.role,
+                        assigned_by = excluded.assigned_by,
+                        assigned_at = excluded.assigned_at
+                    """,
+                    (
+                        membership.deal_id,
+                        membership.user_id,
+                        membership.role.value,
+                        membership.assigned_by,
+                        membership.assigned_at.isoformat(),
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError(
+                f"membership references an unknown user or deal: {membership.deal_id}"
+            ) from error
+
+    def get_deal_membership(self, deal_id: str, user_id: str) -> DealMembership | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM pilot_deal_memberships
+                WHERE deal_id = ? AND user_id = ?
+                """,
+                (deal_id, user_id),
+            ).fetchone()
+        return None if row is None else _membership_from_row(row)
+
+    def create_session(self, session: SessionRecord) -> None:
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO pilot_sessions (
+                        session_id, user_id, token_sha256, created_at,
+                        expires_at, last_seen_at, revoked_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        session.session_id,
+                        session.user_id,
+                        session.token_sha256,
+                        session.created_at.isoformat(),
+                        session.expires_at.isoformat(),
+                        session.last_seen_at.isoformat(),
+                        None if session.revoked_at is None else session.revoked_at.isoformat(),
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError("session could not be created") from error
+
+    def get_session_by_token_hash(self, token_sha256: str) -> SessionRecord | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM pilot_sessions WHERE token_sha256 = ?",
+                (token_sha256,),
+            ).fetchone()
+        return None if row is None else _session_from_row(row)
+
+    def touch_session(self, session_id: str, seen_at: datetime) -> None:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE pilot_sessions SET last_seen_at = ?
+                WHERE session_id = ? AND revoked_at IS NULL
+                """,
+                (seen_at.isoformat(), session_id),
+            )
+
+    def revoke_session(self, session_id: str, revoked_at: datetime) -> None:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE pilot_sessions
+                SET revoked_at = COALESCE(revoked_at, ?)
+                WHERE session_id = ?
+                """,
+                (revoked_at.isoformat(), session_id),
+            )
 
     def add_document(self, record: StoredDocumentRecord) -> None:
         try:
@@ -558,4 +804,41 @@ def _audit_from_row(row: sqlite3.Row) -> PilotAuditEvent:
         object_id=str(row["object_id"]),
         detail=_json_object(str(row["detail_json"])),
         occurred_at=datetime.fromisoformat(str(row["occurred_at"])),
+    )
+
+
+def _user_from_row(row: sqlite3.Row) -> PilotUser:
+    return PilotUser(
+        user_id=str(row["user_id"]),
+        email=str(row["email"]),
+        display_name=str(row["display_name"]),
+        password_hash=None if row["password_hash"] is None else str(row["password_hash"]),
+        status=UserStatus(str(row["status"])),
+        is_pilot_admin=bool(row["is_pilot_admin"]),
+        created_at=datetime.fromisoformat(str(row["created_at"])),
+        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+    )
+
+
+def _membership_from_row(row: sqlite3.Row) -> DealMembership:
+    return DealMembership(
+        deal_id=str(row["deal_id"]),
+        user_id=str(row["user_id"]),
+        role=DealRole(str(row["role"])),
+        assigned_by=str(row["assigned_by"]),
+        assigned_at=datetime.fromisoformat(str(row["assigned_at"])),
+    )
+
+
+def _session_from_row(row: sqlite3.Row) -> SessionRecord:
+    return SessionRecord(
+        session_id=str(row["session_id"]),
+        user_id=str(row["user_id"]),
+        token_sha256=str(row["token_sha256"]),
+        created_at=datetime.fromisoformat(str(row["created_at"])),
+        expires_at=datetime.fromisoformat(str(row["expires_at"])),
+        last_seen_at=datetime.fromisoformat(str(row["last_seen_at"])),
+        revoked_at=(
+            None if row["revoked_at"] is None else datetime.fromisoformat(str(row["revoked_at"]))
+        ),
     )
