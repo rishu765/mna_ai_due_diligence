@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ma_due_diligence.domain import ReviewActionType, Severity
 from ma_due_diligence.persistence.models import DealStatus
 from ma_due_diligence.security.models import DealRole
 
@@ -74,3 +75,21 @@ class DealMembershipResponse(BaseModel):
     role: DealRole
     assigned_by: str
     assigned_at: datetime
+
+
+class PilotReviewDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject_type: str = Field(min_length=1, max_length=40)
+    subject_id: str = Field(min_length=1, max_length=180)
+    action: ReviewActionType
+    rationale: str = Field(min_length=1, max_length=2_000)
+    severity: Severity | None = None
+    preferred_source_id: str | None = Field(default=None, max_length=180)
+
+
+class PilotReviewSubmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rationale: str = Field(min_length=1, max_length=2_000)
+    decisions: list[PilotReviewDecisionRequest] = Field(min_length=1, max_length=200)

@@ -24,6 +24,8 @@ The Step 4 persistence boundary and its security assumptions are documented in
 [Pilot Persistence and Encrypted Document Storage](docs/PILOT_STORAGE.md).
 The Step 5 identity, session, role, permission, and isolation model is documented in
 [Pilot Authentication and Deal Isolation](docs/PILOT_SECURITY.md).
+The Step 6 finance-reviewer interface, local runtime, and deliberate upload boundary are documented
+in [Pilot UI and Runtime](docs/PILOT_UI.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
@@ -92,6 +94,12 @@ The local FastAPI proof of concept provides health, fixture-run creation, run st
 submission, and report retrieval endpoints. It requires no credentials. Run `madd-agent-demo` for an
 offline pause/resume demonstration, `madd-evaluate` for the 14-scenario evaluation, or `madd-api`
 for the API. See [Final agent architecture](docs/final-agent-architecture.md).
+
+The authenticated local pilot is started with `madd-pilot-api`. It serves the minimum Step 6 browser
+journey for sign-in, scoped deal workspaces, the V1 synthetic diligence run, evidence and financial
+review, the human approval gate, and the final report. It uses the persistent, encrypted, and
+deal-isolated pilot services from Steps 4–5. Real VDR upload remains intentionally unavailable until
+Step 7 adds its required document-processing controls.
 
 ## Specialist Diligence and Investigation
 
