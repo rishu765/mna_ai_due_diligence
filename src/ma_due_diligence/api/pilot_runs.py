@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
+from ma_due_diligence.financial.methodology import default_financial_methodology
+from ma_due_diligence.financial.models import CalculationLine
 from ma_due_diligence.persistence import PilotDatabase, PilotRunRecord
 from ma_due_diligence.specialists.fixtures import (
     build_specialist_engagement,
@@ -18,7 +21,11 @@ from ma_due_diligence.workflow_final import (
     WorkflowApplication,
     WorkflowRequest,
 )
-from ma_due_diligence.workflow_final.models import WorkflowState, WorkflowStatus
+from ma_due_diligence.workflow_final.models import (
+    FinancialDiligenceSnapshot,
+    WorkflowState,
+    WorkflowStatus,
+)
 
 
 class PilotRunService:
@@ -151,6 +158,8 @@ def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
             "adjusted_net_debt": _decimal_string(financial.net_debt.adjusted_net_debt),
             "currency": financial.ebitda_bridge.reported_ebitda.currency,
             "unit": financial.ebitda_bridge.unit.value,
+            "methodology": default_financial_methodology().payload(),
+            "calculation_trace": _financial_calculation_trace(financial),
         }
     request = state.get("review_request")
     return {
@@ -187,3 +196,116 @@ def _state_summary(state: WorkflowState) -> dict[str, object]:
 
 def _decimal_string(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _financial_calculation_trace(
+    financial: FinancialDiligenceSnapshot,
+) -> dict[str, object]:
+    ebitda_lines = _calculation_lines(financial.ebitda_bridge.lines)
+    net_debt_lines = _calculation_lines(financial.net_debt.lines)
+    working_capital = [
+        {
+            "period": item.period.label,
+            "formula": "AR + inventory + other operating current assets - AP - other operating current liabilities",
+            "lines": _calculation_lines(item.lines),
+            "result": _decimal_string(item.net_working_capital),
+            "reconciles": None
+            if item.net_working_capital is None
+            else _line_total(item.lines) == item.net_working_capital,
+            "warnings": [warning.message for warning in item.warnings],
+        }
+        for item in financial.working_capital.results
+    ]
+    customers = [
+        {
+            "customer_id": item.customer_id,
+            "revenue": str(item.revenue),
+            "currency": item.currency,
+            "unit": item.unit.value,
+            "period": item.period.label,
+            "evidence_ids": [value.evidence_id for value in item.evidence],
+        }
+        for item in financial.customer_revenues
+    ]
+    reconciliation = financial.revenue_reconciliation
+    return {
+        "revenue_reconciliation": {
+            "metric": reconciliation.metric.value,
+            "period": None if reconciliation.period is None else reconciliation.period.label,
+            "preferred_observation_id": reconciliation.preferred_observation_id,
+            "absolute_variance": _decimal_string(reconciliation.absolute_variance),
+            "percent_variance": _decimal_string(reconciliation.percent_variance),
+            "status": reconciliation.status.value,
+            "rationale": reconciliation.rationale,
+            "observations": [
+                {
+                    "observation_id": item.observation_id,
+                    "value": _decimal_string(item.value),
+                    "currency": item.currency,
+                    "unit": item.unit.value,
+                    "period": item.period.label,
+                    "basis": item.basis.value,
+                    "reporting_status": item.reporting_status.value,
+                    "source_document_type": item.source_document_type.value,
+                    "evidence_ids": [value.evidence_id for value in item.evidence],
+                }
+                for item in reconciliation.observations
+            ],
+        },
+        "ebitda_bridge": {
+            "formula": "reported EBITDA + accepted increases - accepted decreases",
+            "lines": ebitda_lines,
+            "result": _decimal_string(financial.ebitda_bridge.final_adjusted_ebitda),
+            "reconciles": _line_total(financial.ebitda_bridge.lines)
+            == financial.ebitda_bridge.final_adjusted_ebitda,
+            "rejected_adjustment_ids": [
+                item.adjustment_id for item in financial.ebitda_bridge.rejected_adjustments
+            ],
+            "warnings": [item.message for item in financial.ebitda_bridge.warnings],
+        },
+        "customer_concentration": {
+            "formula": "customer revenue / total identified customer revenue × 100",
+            "customers": customers,
+            "total_revenue": _decimal_string(financial.concentration.total_revenue),
+            "largest_customer_percent": _decimal_string(
+                financial.concentration.largest_customer_percent
+            ),
+            "top_five_percent": _decimal_string(financial.concentration.top_five_percent),
+            "top_ten_percent": _decimal_string(financial.concentration.top_ten_percent),
+            "warnings": [item.message for item in financial.concentration.warnings],
+        },
+        "working_capital": working_capital,
+        "nwc_peg": {
+            "method": financial.nwc_peg.method.value,
+            "period_labels": list(financial.nwc_peg.period_labels),
+            "normalized_nwc": _decimal_string(financial.nwc_peg.normalized_nwc),
+            "current_nwc": _decimal_string(financial.nwc_peg.current_nwc),
+            "surplus_or_shortfall": _decimal_string(financial.nwc_peg.surplus_or_shortfall),
+            "warnings": [item.message for item in financial.nwc_peg.warnings],
+        },
+        "net_debt": {
+            "formula": "debt + debt-like items - unrestricted cash - accepted cash-like items",
+            "lines": net_debt_lines,
+            "result": _decimal_string(financial.net_debt.adjusted_net_debt),
+            "reconciles": _line_total(financial.net_debt.lines)
+            == financial.net_debt.adjusted_net_debt,
+            "warnings": [item.message for item in financial.net_debt.warnings],
+        },
+    }
+
+
+def _calculation_lines(lines: tuple[CalculationLine, ...]) -> list[dict[str, object]]:
+    return [
+        {
+            "label": item.label,
+            "amount": str(item.amount),
+            "operation": item.operation,
+            "source_ids": list(item.source_ids),
+            "evidence_ids": [value.evidence_id for value in item.evidence],
+        }
+        for item in lines
+    ]
+
+
+def _line_total(lines: tuple[CalculationLine, ...]) -> Decimal:
+    return sum((item.amount for item in lines), start=Decimal("0"))

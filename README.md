@@ -28,6 +28,8 @@ The Step 6 finance-reviewer interface, local runtime, and deliberate upload boun
 in [Pilot UI and Runtime](docs/PILOT_UI.md).
 The Step 7 validation, scanning, OCR/table, chunk-persistence, and batch-status controls are
 documented in [Pilot Document Processing](docs/PILOT_DOCUMENT_PROCESSING.md).
+The Step 8 versioned policies, source hierarchy, assumptions, thresholds, and calculation traces are
+documented in [Pilot Financial Methodology](docs/PILOT_FINANCIAL_METHODOLOGY.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,

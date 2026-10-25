@@ -23,6 +23,7 @@ from ma_due_diligence.domain import (
 )
 from ma_due_diligence.financial.models import (
     CustomerConcentrationResult,
+    CustomerRevenue,
     EbitdaBridge,
     FinancialFindingOutput,
     NetDebtBridge,
@@ -195,6 +196,7 @@ class FinancialDiligenceSnapshot:
     nwc_peg: NwcPegResult
     net_debt: NetDebtBridge
     findings: tuple[FinancialFindingOutput, ...]
+    customer_revenues: tuple[CustomerRevenue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -48,4 +48,5 @@ def run_fixture_financial_diligence(engagement_id: str) -> FinancialDiligenceSna
         peg,
         net_debt,
         findings,
+        case.customers,
     )

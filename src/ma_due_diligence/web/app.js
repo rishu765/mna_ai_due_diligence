@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const state = { token: null, user: null, deals: [], deal: null, documents: [], run: null, report: null };
+  const state = { token: null, user: null, deals: [], deal: null, documents: [], methodology: null, run: null, report: null };
   const loginView = document.querySelector("#login-view");
   const application = document.querySelector("#application");
   const pageContent = document.querySelector("#page-content");
@@ -80,6 +80,7 @@
     state.deals = [];
     state.deal = null;
     state.documents = [];
+    state.methodology = null;
     state.run = null;
     state.report = null;
     application.hidden = true;
@@ -115,6 +116,7 @@
   function setDeal(dealId) {
     state.deal = state.deals.find((deal) => deal.deal_id === dealId);
     state.documents = [];
+    state.methodology = null;
     state.run = null;
     state.report = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -296,11 +298,24 @@
     bindRouteButtons();
   }
 
-  function renderFinancials() {
+  async function renderFinancials() {
     setHeading(`Deals / ${state.deal.name}`, "Financials");
+    if (!state.methodology) {
+      pageContent.innerHTML = loading("Loading the versioned financial methodology…");
+      try {
+        state.methodology = await api(`/pilot/deals/${state.deal.deal_id}/financial-methodology`);
+      } catch (failure) {
+        pageContent.innerHTML = `<p class="form-error">${escapeHtml(failure.message)}</p>`;
+        return;
+      }
+    }
     const financial = state.run?.financial;
+    const methodology = state.methodology;
+    const assumptions = methodology.engagement_assumptions;
+    const rules = methodology.rules.map((rule) => `<details class="methodology-rule"><summary><span>${escapeHtml(rule.code)}</span><strong>${escapeHtml(rule.title)}</strong></summary><p>${escapeHtml(rule.policy)}</p>${rule.formula ? `<p><strong>Formula:</strong> ${escapeHtml(rule.formula)}</p>` : ""}<p><strong>Reviewer challenges:</strong> ${rule.challenge_questions.map((item) => escapeHtml(item)).join(" · ")}</p></details>`).join("");
+    const trace = financial?.calculation_trace;
     pageContent.innerHTML = `
-      <div class="page-heading"><div><h2>Deterministic financial analysis</h2><p>Values are calculated from typed inputs; unknowns remain unknown.</p></div></div>
+      <div class="page-heading"><div><h2>Deterministic financial analysis</h2><p>Methodology ${escapeHtml(methodology.version)} · ${escapeHtml(methodology.fingerprint_sha256.slice(0, 12))} · values retain full Decimal precision.</p></div></div>
       ${financial ? `<div class="financial-grid">
         ${financialValue("Reported EBITDA", money(financial.reported_ebitda, financial))}
         ${financialValue("Accepted adjustments", money(financial.accepted_adjustments, financial))}
@@ -308,8 +323,27 @@
         ${financialValue("Largest customer", `${financial.largest_customer_percent}%`)}
         ${financialValue("Normalized NWC", money(financial.normalized_nwc, financial))}
         ${financialValue("Adjusted net debt", money(financial.adjusted_net_debt, financial))}
-      </div><section class="panel"><h3>Calculation policy</h3><p class="muted">Only accepted, evidence-supported adjustments enter the EBITDA bridge. Period, currency, unit, and source disagreements remain visible.</p></section>` : empty("£", "No financial output yet", "Complete an analysis run to calculate the QoE, working-capital, concentration, and net-debt outputs.", "Open analysis", "analysis")}`;
+      </div>${trace ? `<section class="panel"><h3>Reproducible calculation trace</h3><p class="muted">Each bridge below shows its formula, signed inputs, source identifiers, and reconciliation result.</p>${calculationTrace(trace)}</section>` : ""}` : empty("£", "No financial output yet", "Complete an analysis run to calculate the QoE, working-capital, concentration, and net-debt outputs.", "Open analysis", "analysis")}
+      <section class="panel"><div class="page-heading"><div><h3>Methodology and engagement assumptions</h3><p>Currency ${escapeHtml(assumptions.reporting_currency)} · unit ${escapeHtml(assumptions.unit)} · as of ${escapeHtml(assumptions.as_of_date)} · materiality ${escapeHtml(assumptions.materiality_threshold || "not preset")}</p></div><span class="status">Version ${escapeHtml(methodology.version)}</span></div><div class="methodology-list">${rules}</div></section>`;
     bindRouteButtons();
+  }
+
+  function calculationTrace(trace) {
+    const ebitda = trace.ebitda_bridge;
+    const netDebt = trace.net_debt;
+    const concentration = trace.customer_concentration;
+    const reconciliation = trace.revenue_reconciliation;
+    const nwc = trace.working_capital.map((item) => calculationBlock(`NWC · ${item.period}`, item.formula, item.lines, item.result, item.reconciles)).join("");
+    const customerInputs = concentration.customers.map((item) => `<div><span>${escapeHtml(item.customer_id)}<small>Period ${escapeHtml(item.period)} · evidence ${escapeHtml(item.evidence_ids.join(", ") || "not available")}</small></span><strong>${escapeHtml(item.revenue)}</strong></div>`).join("");
+    const sourceObservations = reconciliation.observations.map((item) => `<div><span>${escapeHtml(item.observation_id)}<small>${escapeHtml(pretty(item.source_document_type))} · ${escapeHtml(item.period)} · ${escapeHtml(pretty(item.reporting_status))} / ${escapeHtml(pretty(item.basis))} · evidence ${escapeHtml(item.evidence_ids.join(", ") || "not available")}</small></span><strong>${escapeHtml(item.value)}</strong></div>`).join("");
+    const peg = trace.nwc_peg;
+    return `${calculationBlock("EBITDA bridge", ebitda.formula, ebitda.lines, ebitda.result, ebitda.reconciles)}${nwc}<details class="methodology-rule"><summary><span>PEG</span><strong>NWC peg</strong></summary><p>Method: ${escapeHtml(pretty(peg.method))} · periods ${escapeHtml(peg.period_labels.join(", ") || "none")}</p><p>Normalized NWC: ${escapeHtml(peg.normalized_nwc ?? "unknown")} · current NWC: ${escapeHtml(peg.current_nwc ?? "unknown")} · surplus/(shortfall): ${escapeHtml(peg.surplus_or_shortfall ?? "unknown")}</p></details><details class="methodology-rule"><summary><span>CONC</span><strong>Customer concentration</strong></summary><p><strong>Formula:</strong> ${escapeHtml(concentration.formula)}</p><div class="calculation-lines">${customerInputs}</div><p>Total identified revenue: ${escapeHtml(concentration.total_revenue ?? "unknown")} · largest ${escapeHtml(concentration.largest_customer_percent ?? "unknown")}% · top five ${escapeHtml(concentration.top_five_percent ?? "unknown")}% · top ten ${escapeHtml(concentration.top_ten_percent ?? "unknown")}%</p></details>${calculationBlock("Adjusted net debt", netDebt.formula, netDebt.lines, netDebt.result, netDebt.reconciles)}<details class="methodology-rule"><summary><span>RECON</span><strong>Revenue source reconciliation</strong></summary><p>${escapeHtml(reconciliation.rationale)}</p><div class="calculation-lines">${sourceObservations}</div><p>Preferred source: ${escapeHtml(reconciliation.preferred_observation_id || "none")} · absolute variance ${escapeHtml(reconciliation.absolute_variance || "unknown")} · percentage variance ${escapeHtml(reconciliation.percent_variance || "unknown")} · ${escapeHtml(pretty(reconciliation.status))}</p></details>`;
+  }
+
+  function calculationBlock(title, formula, lines, result, reconciles) {
+    const indicator = reconciles === true ? "✓" : reconciles === false ? "!" : "?";
+    const conclusion = reconciles === true ? "reconciled" : reconciles === false ? "does not reconcile" : "input incomplete";
+    return `<details class="methodology-rule"><summary><span>${indicator}</span><strong>${escapeHtml(title)}</strong></summary><p><strong>Formula:</strong> ${escapeHtml(formula)}</p><div class="calculation-lines">${lines.map((line) => `<div><span>${escapeHtml(line.operation)} ${escapeHtml(line.label)}<small>Source ${escapeHtml(line.source_ids.join(", ") || "not available")} · evidence ${escapeHtml(line.evidence_ids.join(", ") || "not available")}</small></span><strong>${escapeHtml(line.amount)}</strong></div>`).join("")}</div><p><strong>Result:</strong> ${escapeHtml(result ?? "unknown")} · ${conclusion}</p></details>`;
   }
 
   function renderReview() {
