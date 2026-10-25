@@ -1,4 +1,4 @@
-# AI Due-Diligence Agent
+# M&A AI Due-Diligence Agent
 
 ## Problem
 
@@ -9,7 +9,7 @@ analyst decisions. A document summary alone cannot do that.
 
 ## Project Goal
 
-Project 5 is an evidence-first assistant for investigating a target-company virtual data room,
+This repository contains an evidence-first assistant for investigating a target-company virtual data room,
 organizing materials, finding conflicts and gaps, supporting specialist analysis, quantifying
 deterministic adjustments, and preparing an auditable diligence report for human approval.
 
@@ -24,7 +24,7 @@ final evaluation, offline demonstration, and local FastAPI interface.
 
 ## M&A Due-Diligence Workflow
 
-The future workflow establishes the engagement and scope, registers VDR documents, retrieves
+The workflow establishes the engagement and scope, registers VDR documents, retrieves
 evidence, extracts atomic candidate facts, compares facts across documents, develops workstream
 findings and financial candidates, routes judgments to an analyst, and assembles approved content.
 
@@ -283,13 +283,13 @@ The LLM will not be the authoritative calculator.
 
 LangGraph is used for durable-in-process state transitions, conditional routing, bounded retry
 loops, checkpointing, and the real analyst interrupt/resume boundary. LangChain is not used as a
-general orchestration layer. Project 5 keeps provider protocols and retrieval services small and
+general orchestration layer. This project keeps provider protocols and retrieval services small and
 framework-neutral; the offline V1 requires no live model.
 
-## Relationship to Projects 1–4
+## Design lineage from the original portfolio
 
 M0 has no runtime imports from Projects 1–4. Those are independent packages without a shared stable
-API. Project 5 adapts their proven patterns inside its own bounded context and exposes protocols for
+API. This project adapts their proven patterns inside its own bounded context and exposes protocols for
 later adapters. See [Project 1–4 reuse](docs/project-1-4-reuse.md).
 
 M1/2 adapts Project 1's conservative normalization, page/index provenance, provider-neutral
@@ -324,9 +324,9 @@ items, a high-severity finding, and an analyst review action.
 - **M4/5 — Specialist Due-Diligence Agents + Cross-Document Risk Investigation: implemented**
 - **M6/7 — LangGraph Orchestration + Human Review + Diligence Report + Evaluation + API/Demo: implemented**
 
-**Project 5 Version 1.0 is complete.**
+**Version 1.0.0 is complete.**
 
-## Portfolio quick reference
+## Project quick reference
 
 | Topic | V1 answer |
 | --- | --- |
