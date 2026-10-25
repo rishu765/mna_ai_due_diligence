@@ -12,8 +12,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 3 | Design the user journey and wireframes | Complete |
 | 4 | Add database and secure document storage | Complete |
 | 5 | Implement authentication and deal isolation | Complete |
-| 6 | Build the minimum UI | Next |
-| 7–17 | Remaining locked sequence below | Not started |
+| 6 | Build the minimum UI | Complete |
+| 7 | Strengthen document processing | Next |
+| 8–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -55,6 +56,10 @@ Exit: automated negative tests prove unauthorized access is rejected.
 - Keep the existing FastAPI service as the backend boundary.
 
 Exit: a finance reviewer completes the journey without command-line or API assistance.
+
+Implemented in the local authenticated browser workflow documented in
+[`PILOT_UI.md`](PILOT_UI.md). The Step 6 journey uses the verified synthetic VDR; real uploads remain
+disabled until Step 7 satisfies its processing and security exit criteria.
 
 ## 7. Strengthen document processing
 

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Evidence-first M&A due-diligence pilot interface"
+    />
+    <title>DealLens — M&A Due Diligence</title>
+    <link rel="stylesheet" href="/assets/styles.css?v=6" />
+  </head>
+  <body>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <main id="login-view" class="login-layout">
+      <section class="login-story" aria-labelledby="product-title">
+        <a class="brand brand-light" href="/" aria-label="DealLens home">
+          <span class="brand-mark" aria-hidden="true">DL</span>
+          <span>DealLens</span>
+        </a>
+        <div class="story-copy">
+          <p class="eyebrow">Evidence-first diligence</p>
+          <h1 id="product-title">Find the deal risks that deserve human judgment.</h1>
+          <p>
+            Review financial, commercial, legal, and operational evidence in one
+            controlled workspace. Every material conclusion remains traceable.
+          </p>
+        </div>
+        <div class="trust-list" aria-label="Product principles">
+          <span>Source-linked findings</span>
+          <span>Deterministic finance</span>
+          <span>Human approval gates</span>
+        </div>
+      </section>
+
+      <section class="login-panel" aria-labelledby="sign-in-title">
+        <form id="login-form" class="login-form">
+          <p class="eyebrow">Controlled pilot</p>
+          <h2 id="sign-in-title">Sign in to your deal workspace</h2>
+          <p class="muted">Access is limited to invited pilot reviewers.</p>
+          <label>
+            Work email
+            <input id="email" name="email" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <p id="login-error" class="form-error" role="alert" hidden></p>
+          <button class="button button-primary button-block" type="submit">Sign in</button>
+          <p class="security-note">Your session is held only for this browser tab.</p>
+        </form>
+      </section>
+    </main>
+
+    <div id="application" class="app-shell" hidden>
+      <aside class="sidebar">
+        <a class="brand" href="#deals" data-route="deals" aria-label="DealLens deals">
+          <span class="brand-mark" aria-hidden="true">DL</span>
+          <span>DealLens</span>
+        </a>
+        <nav class="primary-nav" aria-label="Primary navigation">
+          <button class="nav-item is-active" data-route="deals" type="button">
+            <span aria-hidden="true">◆</span> Deals
+          </button>
+          <button class="nav-item" data-route="overview" type="button" disabled>
+            <span aria-hidden="true">◫</span> Overview
+          </button>
+          <button class="nav-item" data-route="documents" type="button" disabled>
+            <span aria-hidden="true">▤</span> Documents
+          </button>
+          <button class="nav-item" data-route="analysis" type="button" disabled>
+            <span aria-hidden="true">◎</span> Analysis
+          </button>
+          <button class="nav-item" data-route="findings" type="button" disabled>
+            <span aria-hidden="true">!</span> Findings
+          </button>
+          <button class="nav-item" data-route="financials" type="button" disabled>
+            <span aria-hidden="true">£</span> Financials
+          </button>
+          <button class="nav-item" data-route="review" type="button" disabled>
+            <span aria-hidden="true">✓</span> Review queue
+          </button>
+          <button class="nav-item" data-route="report" type="button" disabled>
+            <span aria-hidden="true">▣</span> Report
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="pilot-badge">Pilot environment</div>
+          <button id="logout-button" class="text-button" type="button">Sign out</button>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div>
+            <p id="breadcrumb" class="breadcrumb">Deals</p>
+            <h1 id="page-title">Deal workspaces</h1>
+          </div>
+          <div class="user-menu" aria-label="Signed-in user">
+            <span id="user-avatar" class="avatar" aria-hidden="true">U</span>
+            <span>
+              <strong id="user-name">User</strong>
+              <small id="user-role">Pilot user</small>
+            </span>
+          </div>
+        </header>
+        <div id="page-content" class="page-content" tabindex="-1"></div>
+      </div>
+    </div>
+
+    <dialog id="create-deal-dialog">
+      <form id="create-deal-form" class="dialog-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">New workspace</p>
+            <h2>Create a deal</h2>
+          </div>
+          <button class="icon-button" value="cancel" formmethod="dialog" aria-label="Close">×</button>
+        </div>
+        <div class="field-grid">
+          <label>Deal name<input name="name" required value="Project Northstar" /></label>
+          <label>Target company<input name="target_name" required value="SecureTech" /></label>
+          <label>Buyer / acquirer<input name="buyer_name" value="Northstar Holdings" /></label>
+          <label>
+            Transaction type
+            <select name="transaction_type">
+              <option value="acquisition">Acquisition</option>
+              <option value="merger">Merger</option>
+              <option value="minority_investment">Minority investment</option>
+            </select>
+          </label>
+          <label>Reporting currency<input name="reporting_currency" value="GBP" maxlength="3" /></label>
+          <label>As-of date<input name="as_of_date" type="date" value="2026-06-30" /></label>
+        </div>
+        <label>
+          Scope notes
+          <textarea name="notes" rows="3">Controlled evidence-first pilot review.</textarea>
+        </label>
+        <p id="deal-form-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" value="cancel" formmethod="dialog">Cancel</button>
+          <button class="button button-primary" type="submit">Create workspace</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/assets/app.js?v=6" defer></script>
+  </body>
+</html>
