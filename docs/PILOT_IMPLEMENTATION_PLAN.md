@@ -10,8 +10,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 1 | Freeze V1 | Complete |
 | 2 | Lock pilot scope and acceptance criteria | Complete; company-specific constraints remain configurable |
 | 3 | Design the user journey and wireframes | Complete |
-| 4 | Add database and secure document storage | In progress — repository and encrypted-storage foundation implemented |
-| 5–17 | Remaining locked sequence below | Not started |
+| 4 | Add database and secure document storage | Complete |
+| 5 | Implement authentication and deal isolation | Next |
+| 6–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 

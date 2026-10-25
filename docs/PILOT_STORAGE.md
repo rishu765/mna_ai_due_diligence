@@ -14,6 +14,9 @@ flowchart LR
     B --> D[EncryptedLocalDocumentStore]
     D --> E[(Private object directory)]
     F[External secret manager / environment] -->|256-bit key| D
+    A --> L[PersistentWorkflowRuntime]
+    L --> M[(Encrypted LangGraph checkpoints)]
+    F -->|separate 256-bit key| L
     C --> G[Deals]
     C --> H[Document metadata]
     C --> I[Runs]
@@ -35,6 +38,8 @@ are never placed in the database or Git repository.
 - Decimal-like financial values stored as strings inside typed payloads rather than floating point
 - Append-only audit-event API
 - Atomic document-metadata and audit-event registration
+- Durable LangGraph pause/resume state through the official SQLite checkpointer
+- Authenticated checkpoint encryption with a key separate from document encryption
 
 SQLite is intentionally acceptable only for the first single-instance controlled pilot. A broader
 or highly concurrent deployment should implement the same repository boundary using a managed
@@ -74,8 +79,9 @@ Generate a key through the application helper or an approved secret-management p
 encoded value in the deployment secret manager; never put it in `.env.example`, source code, test
 fixtures, logs, command history, or Git.
 
-The first adapter supports one active key. Key identifiers, rotation, re-encryption, recovery, and
-hardware-backed custody must be addressed before a production deployment.
+The first adapters support one active document key and one active checkpoint key. Key identifiers,
+rotation, re-encryption, recovery, and hardware-backed custody must be addressed before a production
+deployment.
 
 ## Failure behavior
 
@@ -86,6 +92,8 @@ hardware-backed custody must be addressed before a production deployment.
 - Duplicate global identifiers raise a typed persistence conflict.
 - If blob encryption succeeds but database registration fails, the new encrypted blob is removed.
 - Individual resources are never silently reassigned to another deal.
+- A paused human-review workflow can be reopened and resumed after the application process restarts.
+- Checkpoint tampering or use of the wrong key fails authenticated decryption.
 
 ## Current limitations
 
@@ -93,7 +101,8 @@ hardware-backed custody must be addressed before a production deployment.
 - SQLite is not a multi-instance production database.
 - Backup, restoration, key rotation, secure deletion, retention automation, and storage reconciliation
   still require implementation and operational validation.
-- Workflow services and the public API are not yet wired to this repository.
+- The public API is not yet wired to these pilot adapters; the persistent workflow runtime is ready
+  for that integration after authentication and authorization are implemented.
 - Malware scanning, upload limits, OCR, and document-processing hardening remain later milestones.
 - Database contents rely on deployment-volume encryption; application-level field encryption is not
   included in this milestone.
@@ -104,3 +113,5 @@ Automated tests cover encrypted round trips, ciphertext confidentiality, deal/do
 binding, traversal rejection, key validation, explicit deletion, database reopening, schema version,
 foreign keys, cross-deal query isolation, durable deals/documents/runs/artifacts/audit events, run
 updates, atomic document registration, and compensating blob cleanup.
+The suite also executes a real LangGraph pause, closes the application runtime, reopens the encrypted
+checkpoint database, restores the review state, resumes it, and validates the completed report.

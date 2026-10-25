@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 from cryptography.exceptions import InvalidTag
 
+from ma_due_diligence.domain import ReviewActionType, Severity
 from ma_due_diligence.persistence import (
     ArtifactKind,
     DealStatus,
     EncryptedLocalDocumentStore,
     PersistenceConflictError,
+    PersistentWorkflowRuntime,
     PilotArtifactRecord,
     PilotAuditEvent,
     PilotDatabase,
@@ -23,6 +25,17 @@ from ma_due_diligence.persistence import (
     document_key_from_environment,
     generate_document_key,
 )
+from ma_due_diligence.specialists.fixtures import (
+    build_specialist_engagement,
+    create_specialist_fixture_vdr,
+)
+from ma_due_diligence.workflow_final import (
+    HumanReviewSubmission,
+    ReviewDecision,
+    WorkflowRequest,
+    WorkflowStatus,
+)
+from ma_due_diligence.workflow_final.checkpointing import EncryptedCheckpointSerializer
 
 
 def _deal(deal_id: str = "deal-northstar") -> PilotDealRecord:
@@ -107,6 +120,18 @@ def test_document_key_helpers_validate_environment(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MADD_DOCUMENT_KEY", "%%%")
     with pytest.raises(RuntimeError, match="not valid URL-safe base64"):
         document_key_from_environment()
+
+
+def test_encrypted_checkpoint_serializer_rejects_wrong_key() -> None:
+    serializer = EncryptedCheckpointSerializer(bytes(range(32)))
+    payload = {"target": "SecureTech", "status": "review_required"}
+
+    encoded = serializer.dumps_typed(payload)
+
+    assert b"SecureTech" not in encoded[1]
+    assert serializer.loads_typed(encoded) == payload
+    with pytest.raises(InvalidTag):
+        EncryptedCheckpointSerializer(bytes(reversed(range(32)))).loads_typed(encoded)
 
 
 def test_database_persists_deal_document_run_artifact_and_audit(tmp_path: Path) -> None:
@@ -312,3 +337,51 @@ def test_document_service_removes_blob_when_database_registration_fails(tmp_path
         )
 
     assert tuple(object_root.rglob("*.madd")) == existing_blobs
+
+
+def test_encrypted_workflow_checkpoint_survives_runtime_restart(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "checkpoints.sqlite3"
+    manifest = create_specialist_fixture_vdr(tmp_path / "vdr")
+    engagement = build_specialist_engagement()
+    thread_id = "persistent-review-run"
+    key = bytes(range(32))
+
+    with PersistentWorkflowRuntime(checkpoint_path, key) as first_runtime:
+        paused = first_runtime.application.start(
+            WorkflowRequest(engagement.engagement_id, engagement, manifest),
+            thread_id=thread_id,
+        )
+        assert paused["status"] is WorkflowStatus.REVIEW_REQUIRED
+        finding_id = paused["review_request"].finding_ids[0]
+
+    database_bytes = b"".join(
+        path.read_bytes() for path in tmp_path.glob("checkpoints.sqlite3*") if path.is_file()
+    )
+    assert b"SecureTech" not in database_bytes
+
+    with PersistentWorkflowRuntime(checkpoint_path, key) as second_runtime:
+        restored = second_runtime.application.state(thread_id=thread_id)
+        assert restored["status"] is WorkflowStatus.REVIEW_REQUIRED
+        assert restored["review_request"] == paused["review_request"]
+        completed = second_runtime.application.resume(
+            thread_id=thread_id,
+            submission=HumanReviewSubmission(
+                "Deal Team Reviewer",
+                "Reviewed after application restart.",
+                (
+                    ReviewDecision(
+                        "finding",
+                        finding_id,
+                        ReviewActionType.CHANGE_SEVERITY,
+                        "Material but mitigable.",
+                        Severity.MEDIUM,
+                    ),
+                ),
+            ),
+        )
+
+    assert completed["status"] in {
+        WorkflowStatus.COMPLETED,
+        WorkflowStatus.COMPLETED_WITH_WARNINGS,
+    }
+    assert completed["report"].review_action_ids

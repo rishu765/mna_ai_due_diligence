@@ -1,5 +1,6 @@
 """Pilot persistence and encrypted document-storage boundaries."""
 
+from .checkpoints import PersistentWorkflowRuntime
 from .database import PersistenceConflictError, PilotDatabase
 from .document_store import (
     EncryptedLocalDocumentStore,
@@ -24,6 +25,7 @@ __all__ = [
     "DealStatus",
     "EncryptedLocalDocumentStore",
     "PersistenceConflictError",
+    "PersistentWorkflowRuntime",
     "PilotArtifactRecord",
     "PilotAuditEvent",
     "PilotDatabase",
