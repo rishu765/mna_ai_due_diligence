@@ -6,7 +6,7 @@ import csv
 import unicodedata
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pymupdf
 from openpyxl import load_workbook
@@ -36,6 +36,15 @@ def normalize_source_text(text: str) -> str:
 
 
 class VdrDocumentParser:
+    def __init__(
+        self,
+        *,
+        ocr_enabled: bool = False,
+        pdf_table_extraction: bool = False,
+    ) -> None:
+        self._ocr_enabled = ocr_enabled
+        self._pdf_table_extraction = pdf_table_extraction
+
     def parse(self, path: Path, document: VdrDocument) -> ParsedVdrDocument:
         suffix = path.suffix.casefold()
         try:
@@ -70,9 +79,15 @@ class VdrDocumentParser:
                 for page_index in range(pdf.page_count):
                     page = pdf.load_page(page_index)
                     text = normalize_source_text(cast(str, page.get_text("text")))
+                    if not text.strip() and self._ocr_enabled:
+                        text = self._ocr_page(page, page_index + 1, warnings)
+                    if self._pdf_table_extraction:
+                        elements.extend(self._pdf_tables(page, page_index + 1, warnings))
                     if not text.strip():
                         warnings.append(
-                            f"Page {page_index + 1} has no extractable text; OCR not attempted."
+                            f"Page {page_index + 1} has no extractable text after OCR."
+                            if self._ocr_enabled
+                            else f"Page {page_index + 1} has no extractable text; OCR not attempted."
                         )
                         continue
                     elements.extend(
@@ -88,6 +103,57 @@ class VdrDocumentParser:
         return ParsedVdrDocument(
             document, DocumentFormat.PDF, tuple(elements), page_count, tuple(warnings)
         )
+
+    @staticmethod
+    def _ocr_page(page: Any, page_number: int, warnings: list[str]) -> str:
+        try:
+            text_page = page.get_textpage_ocr(language="eng", dpi=150, full=True)
+            return normalize_source_text(cast(str, page.get_text("text", textpage=text_page)))
+        except Exception as error:
+            warnings.append(f"Page {page_number} OCR failed: {error}")
+            return ""
+
+    @staticmethod
+    def _pdf_tables(
+        page: Any,
+        page_number: int,
+        warnings: list[str],
+    ) -> list[ParsedElement]:
+        find_tables = getattr(page, "find_tables", None)
+        if not callable(find_tables):
+            return []
+        try:
+            finder = find_tables()
+            tables = getattr(finder, "tables", ())
+            elements: list[ParsedElement] = []
+            for table_index, table in enumerate(tables, start=1):
+                rows = table.extract()
+                header = (
+                    " | ".join("" if cell is None else str(cell) for cell in rows[0])
+                    if rows
+                    else None
+                )
+                for row_number, row in enumerate(rows, start=1):
+                    cells = tuple("" if cell is None else str(cell) for cell in row)
+                    if not any(cell.strip() for cell in cells):
+                        continue
+                    elements.append(
+                        ParsedElement(
+                            f"p{page_number}-table{table_index}-r{row_number}",
+                            ElementKind.TABLE_ROW,
+                            " | ".join(cells),
+                            page_number,
+                            page_number - 1,
+                            table_id=f"p{page_number}-table{table_index}",
+                            row_number=row_number,
+                            cell_range=f"row:{row_number};columns:{len(cells)}",
+                            nearby_context=None if row_number == 1 else header,
+                        )
+                    )
+            return elements
+        except Exception as error:
+            warnings.append(f"Page {page_number} table extraction failed: {error}")
+            return []
 
     def _text(
         self, path: Path, document: VdrDocument, format_: DocumentFormat

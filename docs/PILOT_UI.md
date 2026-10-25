@@ -19,9 +19,9 @@ logic or imply production readiness.
 7. Complete the explicit human-review gate when authorized as a reviewer or administrator.
 8. Read the final evidence-linked report after the workflow releases it.
 
-The UI deliberately labels the analysis as a synthetic demonstration. Real document upload and
-processing controls remain disabled until Step 7 adds the agreed validation, scanning, OCR, table,
-batch-status, and failure-recovery behavior.
+The UI deliberately labels the analysis as a synthetic demonstration. At Step 6, real document
+upload remained disabled pending the Step 7 validation, scanning, OCR, table, batch-status, and
+failure-recovery behavior.
 
 ## Runtime
 
@@ -82,7 +82,7 @@ and narrow-screen layout.
 ## Known limitations
 
 - The UI is a minimum local pilot interface, not a deployed multi-tenant product.
-- Step 6 uses the synthetic VDR only; real uploads begin in Step 7.
+- Step 6 uses the synthetic VDR only; Step 7 subsequently adds the real upload inventory.
 - Review decisions are generated from the bounded demonstration policy rather than an editable
   decision register; richer review and audit interactions are Step 9.
 - Report and Excel downloads are Step 10.

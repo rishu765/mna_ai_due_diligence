@@ -77,6 +77,45 @@ class DealMembershipResponse(BaseModel):
     assigned_at: datetime
 
 
+class PilotDocumentIssueResponse(BaseModel):
+    code: str
+    message: str
+
+
+class PilotUploadRejectionResponse(PilotDocumentIssueResponse):
+    filename: str
+
+
+class PilotDocumentResponse(BaseModel):
+    document_id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    status: str
+    batch_id: str | None
+    processing_stage: str | None
+    document_type: str | None
+    workstreams: list[str]
+    page_count: int | None
+    element_count: int | None
+    table_row_count: int | None
+    chunk_count: int | None
+    warnings: list[str]
+    issues: list[PilotDocumentIssueResponse]
+    created_at: datetime
+
+
+class PilotDocumentBatchResponse(BaseModel):
+    batch_id: str
+    document_count: int
+    rejection_count: int
+    status_counts: dict[str, int]
+    complete: bool
+    documents: list[PilotDocumentResponse]
+    rejections: list[PilotUploadRejectionResponse]
+
+
 class PilotReviewDecisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

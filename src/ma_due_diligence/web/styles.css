@@ -84,7 +84,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .status { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 9px; background: #edf0eb; color: #44514d; font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status-review_required, .status-completed_with_warnings { background: var(--amber-soft); color: var(--amber); }
-.status-completed { background: #e1f1e9; color: var(--green); }
+.status-partial { background: var(--amber-soft); color: var(--amber); }
+.status-failed { background: var(--red-soft); color: var(--red); }
+.status-completed, .status-indexed { background: #e1f1e9; color: var(--green); }
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .stat { padding: 18px; }
 .stat span { display: block; color: var(--ink-soft); font-size: 12px; }
@@ -107,6 +109,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .evidence { padding: 0 15px 15px 115px; }
 .evidence blockquote { margin: 10px 0; padding: 12px; border-left: 2px solid var(--line); background: #f7f8f5; color: #45514e; font-size: 13px; line-height: 1.55; }
 .review-list { display: grid; gap: 8px; margin: 16px 0; }
+.document-list { display: grid; gap: 10px; }
+.document-row { display: flex; align-items: start; justify-content: space-between; gap: 18px; padding: 18px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.document-row h3 { margin: 0 0 6px; font-size: 15px; overflow-wrap: anywhere; }
+.document-row p { margin: 0; color: var(--ink-soft); font-size: 12px; }
+.document-row small { display: block; margin-top: 8px; color: var(--amber); line-height: 1.45; }
+.upload-button { display: inline-flex; align-items: center; cursor: pointer; }
 .review-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .review-row:last-child { border-bottom: 0; }
 .warning-box { border-radius: 9px; padding: 13px 14px; background: var(--amber-soft); color: #744106; font-size: 13px; }
@@ -150,4 +158,5 @@ dialog::backdrop { background: rgba(13,44,42,.45); backdrop-filter: blur(3px); }
   .finding summary { grid-template-columns: 76px 1fr; }
   .finding summary > span:last-child { display: none; }
   .evidence { padding-left: 15px; }
+  .document-row { align-items: stretch; flex-direction: column; }
 }

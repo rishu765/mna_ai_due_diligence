@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const state = { token: null, user: null, deals: [], deal: null, run: null, report: null };
+  const state = { token: null, user: null, deals: [], deal: null, documents: [], run: null, report: null };
   const loginView = document.querySelector("#login-view");
   const application = document.querySelector("#application");
   const pageContent = document.querySelector("#page-content");
@@ -29,7 +29,9 @@
       if (response.status === 401 && state.token) resetSession();
       const detail = Array.isArray(body.detail)
         ? body.detail.map((item) => item.msg || "Invalid value").join(" ")
-        : body.detail;
+        : typeof body.detail === "object"
+          ? body.detail.message || body.detail.code
+          : body.detail;
       throw new Error(detail || "The request could not be completed.");
     }
     return body;
@@ -77,6 +79,7 @@
     state.user = null;
     state.deals = [];
     state.deal = null;
+    state.documents = [];
     state.run = null;
     state.report = null;
     application.hidden = true;
@@ -111,6 +114,7 @@
 
   function setDeal(dealId) {
     state.deal = state.deals.find((deal) => deal.deal_id === dealId);
+    state.documents = [];
     state.run = null;
     state.report = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -121,6 +125,7 @@
 
   function renderDeals() {
     state.deal = null;
+    state.documents = [];
     state.run = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
       if (item.dataset.route !== "deals") item.disabled = true;
@@ -172,12 +177,84 @@
     bindRouteButtons();
   }
 
-  function renderDocuments() {
+  async function renderDocuments() {
     setHeading(`Deals / ${state.deal.name}`, "Documents");
+    const dealId = state.deal.deal_id;
+    pageContent.innerHTML = loading("Loading the encrypted document inventory…");
+    try {
+      state.documents = await api(`/pilot/deals/${dealId}/documents`);
+    } catch (failure) {
+      pageContent.innerHTML = `<p class="form-error">${escapeHtml(failure.message)}</p>`;
+      return;
+    }
+    if (!state.deal || state.deal.deal_id !== dealId) return;
+    const indexed = state.documents.filter((item) => item.status === "indexed").length;
+    const exceptions = state.documents.filter((item) => ["partial", "failed"].includes(item.status)).length;
+    const rows = state.documents.length
+      ? `<div class="document-list">${state.documents.map(documentRow).join("")}</div>`
+      : empty("▤", "No pilot documents uploaded", "Upload supported PDF, XLSX, CSV, TXT, Markdown, or HTML files. Each file is validated, screened, encrypted, parsed, and retained with a visible status.");
     pageContent.innerHTML = `
-      <div class="page-heading"><div><h2>Virtual data room</h2><p>Document inventory, processing state, versions, and exceptions.</p></div><button class="button button-secondary" disabled>Upload documents</button></div>
-      ${state.run ? `<div class="stats">${stat("Processed in demo", state.run.document_count)}${stat("Warnings", state.run.warnings.length)}${stat("Deal scope", state.deal.reporting_currency)}${stat("As-of date", state.deal.as_of_date)}</div>` : ""}
-      ${empty("▤", "Secure uploads arrive in Step 7", "The current UI runs the verified synthetic VDR. Real pilot uploads will use the encrypted store, malware checks, batch status, and visible failures.")}`;
+      <div class="page-heading"><div><h2>Virtual data room</h2><p>Encrypted document inventory, processing status, and recoverable exceptions.</p></div><label class="button button-primary upload-button">Upload documents<input id="document-upload" type="file" multiple hidden accept=".pdf,.xlsx,.csv,.txt,.md,.markdown,.html,.htm" /></label></div>
+      <div class="stats">${stat("Uploaded", state.documents.length)}${stat("Indexed", indexed)}${stat("Exceptions", exceptions)}${stat("Maximum file", "50 MB")}</div>
+      <p id="upload-progress" class="muted">Files are processed independently; one failure does not discard the batch.</p>
+      ${rows}`;
+    document.querySelector("#document-upload").addEventListener("change", uploadDocuments);
+  }
+
+  async function uploadDocuments(event) {
+    const input = event.currentTarget;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    const batchId = `batch-${crypto.randomUUID()}`;
+    const progress = document.querySelector("#upload-progress");
+    input.disabled = true;
+    let accepted = 0;
+    const failures = [];
+    for (const [index, file] of files.entries()) {
+      progress.textContent = `Processing ${index + 1} of ${files.length}: ${file.name}`;
+      try {
+        const response = await fetch(`/pilot/deals/${state.deal.deal_id}/documents`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${state.token}`,
+            "Content-Type": file.type || "application/octet-stream",
+            "X-Filename": encodeURIComponent(file.name),
+            "X-Upload-Batch": batchId,
+          },
+          body: file,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = typeof body.detail === "object" ? body.detail.message : body.detail;
+          throw new Error(detail || "Upload failed.");
+        }
+        accepted += 1;
+      } catch (failure) {
+        failures.push(`${file.name}: ${failure.message}`);
+      }
+    }
+    input.disabled = false;
+    input.value = "";
+    toast(`${accepted} of ${files.length} documents processed${failures.length ? `; ${failures.length} rejected` : ""}.`, Boolean(failures.length));
+    await renderDocuments();
+    if (failures.length) {
+      document.querySelector("#upload-progress").textContent = failures.join(" · ");
+    }
+  }
+
+  function documentRow(item) {
+    const issues = [...(item.warnings || []), ...(item.issues || []).map((issue) => issue.message)];
+    const details = [
+      item.document_type ? pretty(item.document_type) : "Classification unavailable",
+      `${formatBytes(item.size_bytes)}`,
+      item.page_count ? `${item.page_count} pages` : null,
+      item.chunk_count != null ? `${item.chunk_count} chunks` : null,
+      item.table_row_count ? `${item.table_row_count} table rows` : null,
+    ].filter(Boolean).join(" · ");
+    return `<article class="document-row">
+      <div><h3>${escapeHtml(item.filename)}</h3><p>${escapeHtml(details)}</p>${issues.length ? `<small>${escapeHtml(issues.join(" · "))}</small>` : ""}</div>
+      ${status(item.status)}
+    </article>`;
   }
 
   function renderAnalysis() {
@@ -355,6 +432,11 @@
       ? numericValue.toLocaleString("en-GB", { maximumFractionDigits: 2 })
       : String(value);
     return `${financial.currency} ${displayValue}${financial.unit === "million" ? "m" : ""}`;
+  }
+  function formatBytes(value) {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
   }
   function status(value) { return `<span class="status status-${escapeHtml(value)}">${escapeHtml(pretty(value))}</span>`; }
   function empty(icon, title, copy, action, routeName) { return `<section class="panel empty-state"><div class="empty-icon">${icon}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(copy)}</p>${action ? `<button class="button button-primary" type="button" data-action="${escapeHtml(routeName)}">${escapeHtml(action)}</button>` : ""}</section>`; }

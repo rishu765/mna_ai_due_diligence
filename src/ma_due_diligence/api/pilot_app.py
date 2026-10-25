@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -21,12 +21,19 @@ from ma_due_diligence.security.service import PilotAuthService
 from ma_due_diligence.workflow_final import HumanReviewSubmission, ReviewDecision
 from ma_due_diligence.workflow_final.models import WorkflowStatus
 
+from .pilot_documents import (
+    PilotDocumentProcessingService,
+    UploadRejectedError,
+    document_payload,
+)
 from .pilot_runs import PilotRunService, run_payload
 from .pilot_schemas import (
     AssignDealRoleRequest,
     CreatePilotDealRequest,
     DealMembershipResponse,
     PilotDealResponse,
+    PilotDocumentBatchResponse,
+    PilotDocumentResponse,
     PilotLoginRequest,
     PilotLoginResponse,
     PilotPrincipalResponse,
@@ -40,6 +47,7 @@ class PilotApiContext:
     database: PilotDatabase
     auth: PilotAuthService
     runs: PilotRunService | None = None
+    documents: PilotDocumentProcessingService | None = None
 
 
 def create_pilot_app(context: PilotApiContext) -> FastAPI:
@@ -181,6 +189,91 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             ) from error
         return asdict(membership)
 
+    @app.get(
+        "/pilot/deals/{deal_id}/documents",
+        response_model=list[PilotDocumentResponse],
+    )
+    def list_documents(
+        deal_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> list[dict[str, object]]:
+        documents = _documents_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        return [document_payload(item) for item in documents.list_documents(deal_id)]
+
+    @app.post(
+        "/pilot/deals/{deal_id}/documents",
+        response_model=PilotDocumentResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def upload_document(
+        deal_id: str,
+        request: Request,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+        filename: Annotated[str, Header(alias="X-Filename")],
+        batch_id: Annotated[str, Header(alias="X-Upload-Batch")],
+    ) -> dict[str, object]:
+        documents = _documents_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DOCUMENT_WRITE)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > documents.maximum_file_bytes:
+                    raise HTTPException(status_code=413, detail="file exceeds the upload limit")
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail="invalid content length") from error
+        payload = bytearray()
+        async for block in request.stream():
+            payload.extend(block)
+            if len(payload) > documents.maximum_file_bytes:
+                raise HTTPException(status_code=413, detail="file exceeds the upload limit")
+        try:
+            record = documents.process_upload(
+                deal_id=deal_id,
+                encoded_filename=filename,
+                content_type=request.headers.get("content-type", "application/octet-stream"),
+                content=bytes(payload),
+                actor_id=authenticated.user_id,
+                batch_id=batch_id,
+            )
+        except UploadRejectedError as error:
+            rejection_status = 409 if error.code == "duplicate_document" else 422
+            raise HTTPException(
+                status_code=rejection_status,
+                detail={"code": error.code, "message": error.detail},
+            ) from error
+        return document_payload(record)
+
+    @app.get(
+        "/pilot/deals/{deal_id}/document-batches/{batch_id}",
+        response_model=PilotDocumentBatchResponse,
+    )
+    def get_document_batch(
+        deal_id: str,
+        batch_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object]:
+        documents = _documents_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+            return documents.batch_payload(deal_id, batch_id)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        except UploadRejectedError as error:
+            raise HTTPException(status_code=400, detail=error.detail) from error
+
     @app.post("/pilot/deals/{deal_id}/runs", status_code=status.HTTP_201_CREATED)
     def start_run(
         deal_id: str,
@@ -316,3 +409,9 @@ def _runs_or_503(context: PilotApiContext) -> PilotRunService:
     if context.runs is None:
         raise HTTPException(status_code=503, detail="workflow service is not configured")
     return context.runs
+
+
+def _documents_or_503(context: PilotApiContext) -> PilotDocumentProcessingService:
+    if context.documents is None:
+        raise HTTPException(status_code=503, detail="document service is not configured")
+    return context.documents
