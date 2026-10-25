@@ -13,8 +13,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 4 | Add database and secure document storage | Complete |
 | 5 | Implement authentication and deal isolation | Complete |
 | 6 | Build the minimum UI | Complete |
-| 7 | Strengthen document processing | Next |
-| 8–17 | Remaining locked sequence below | Not started |
+| 7 | Strengthen document processing | Complete |
+| 8 | Formalize financial methodologies | Next |
+| 9–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -67,6 +68,11 @@ disabled until Step 7 satisfies its processing and security exit criteria.
   recoverable per-document failures according to pilot needs.
 
 Exit: the agreed representative VDR produces a complete and transparent ingestion report.
+
+Implemented in the encrypted, deal-scoped upload and processing workflow documented in
+[`PILOT_DOCUMENT_PROCESSING.md`](PILOT_DOCUMENT_PROCESSING.md). Each file receives a durable status,
+structured issues, persisted chunks, and batch/audit visibility. Real uploads remain isolated from
+the synthetic analysis run until the later controlled-AI/retrieval integration is verified.
 
 ## 8. Formalize financial methodologies
 

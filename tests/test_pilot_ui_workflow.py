@@ -95,6 +95,10 @@ def test_runtime_bootstraps_configured_administrator(
         "MADD_CHECKPOINT_KEY",
         "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
     )
+    monkeypatch.setenv(
+        "MADD_DOCUMENT_KEY",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
     monkeypatch.setenv("MADD_BOOTSTRAP_ADMIN_EMAIL", "pilot@example.com")
     monkeypatch.setenv("MADD_BOOTSTRAP_ADMIN_PASSWORD", "pilot password long enough")
     monkeypatch.setenv("MADD_BOOTSTRAP_ADMIN_NAME", "Pilot Reviewer")

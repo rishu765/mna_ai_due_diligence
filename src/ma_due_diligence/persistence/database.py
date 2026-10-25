@@ -30,7 +30,7 @@ from .models import (
     StoredDocumentStatus,
 )
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS pilot_schema_migrations (
@@ -164,6 +164,23 @@ CREATE INDEX IF NOT EXISTS idx_pilot_sessions_user_expiry
 ON pilot_sessions(user_id, expires_at);
 """
 
+_SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS pilot_document_chunks (
+    chunk_id TEXT PRIMARY KEY,
+    deal_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
+    chunk_text TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    UNIQUE (deal_id, document_id, chunk_index),
+    FOREIGN KEY (deal_id) REFERENCES pilot_deals(deal_id) ON DELETE CASCADE,
+    FOREIGN KEY (document_id) REFERENCES pilot_documents(document_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pilot_chunks_deal_document
+ON pilot_document_chunks(deal_id, document_id, chunk_index);
+"""
+
 
 class PersistenceConflictError(RuntimeError):
     """Raised when an identifier already belongs to another persisted object."""
@@ -189,6 +206,12 @@ class PilotDatabase:
                 (1,),
             )
             connection.executescript(_SCHEMA_V2)
+            connection.execute(
+                "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
+                "VALUES (?, datetime('now'))",
+                (2,),
+            )
+            connection.executescript(_SCHEMA_V3)
             connection.execute(
                 "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
                 "VALUES (?, datetime('now'))",
@@ -558,6 +581,96 @@ class PilotDatabase:
                 (deal_id,),
             ).fetchall()
         return tuple(_document_from_row(row) for row in rows)
+
+    def update_document_processing(
+        self,
+        record: StoredDocumentRecord,
+        event: PilotAuditEvent,
+        chunks: tuple[JsonObject, ...] = (),
+    ) -> None:
+        """Atomically persist a processing result and its audit event."""
+
+        if event.deal_id != record.deal_id:
+            raise ValueError("document and audit event must belong to the same deal")
+        if event.object_type != "document" or event.object_id != record.document_id:
+            raise ValueError("document audit event must identify the processed document")
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE pilot_documents
+                SET status = ?, metadata_json = ?
+                WHERE deal_id = ? AND document_id = ?
+                """,
+                (
+                    record.status.value,
+                    _json_dumps(record.metadata),
+                    record.deal_id,
+                    record.document_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"document not found in deal: {record.document_id}")
+            connection.execute(
+                "DELETE FROM pilot_document_chunks WHERE deal_id = ? AND document_id = ?",
+                (record.deal_id, record.document_id),
+            )
+            for chunk in chunks:
+                chunk_index = chunk.get("chunk_index")
+                chunk_text = chunk.get("text")
+                if not isinstance(chunk_index, int) or chunk_index < 0:
+                    raise ValueError("persisted chunk index must be a nonnegative integer")
+                if not isinstance(chunk_text, str) or not chunk_text.strip():
+                    raise ValueError("persisted chunk text must not be blank")
+                connection.execute(
+                    """
+                    INSERT INTO pilot_document_chunks (
+                        chunk_id, deal_id, document_id, chunk_index, chunk_text, metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"{record.document_id}:chunk:{chunk_index}",
+                        record.deal_id,
+                        record.document_id,
+                        chunk_index,
+                        chunk_text,
+                        _json_dumps(chunk),
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO pilot_audit_events (
+                    event_id, deal_id, actor_id, action, object_type,
+                    object_id, detail_json, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.deal_id,
+                    event.actor_id,
+                    event.action,
+                    event.object_type,
+                    event.object_id,
+                    _json_dumps(event.detail),
+                    event.occurred_at.isoformat(),
+                ),
+            )
+
+    def list_document_chunks(
+        self,
+        deal_id: str,
+        document_id: str,
+    ) -> tuple[JsonObject, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT metadata_json
+                FROM pilot_document_chunks
+                WHERE deal_id = ? AND document_id = ?
+                ORDER BY chunk_index
+                """,
+                (deal_id, document_id),
+            ).fetchall()
+        return tuple(_json_object(str(row["metadata_json"])) for row in rows)
 
     def save_run(self, record: PilotRunRecord) -> None:
         try:

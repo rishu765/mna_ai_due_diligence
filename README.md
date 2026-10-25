@@ -26,6 +26,8 @@ The Step 5 identity, session, role, permission, and isolation model is documente
 [Pilot Authentication and Deal Isolation](docs/PILOT_SECURITY.md).
 The Step 6 finance-reviewer interface, local runtime, and deliberate upload boundary are documented
 in [Pilot UI and Runtime](docs/PILOT_UI.md).
+The Step 7 validation, scanning, OCR/table, chunk-persistence, and batch-status controls are
+documented in [Pilot Document Processing](docs/PILOT_DOCUMENT_PROCESSING.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
@@ -98,8 +100,13 @@ for the API. See [Final agent architecture](docs/final-agent-architecture.md).
 The authenticated local pilot is started with `madd-pilot-api`. It serves the minimum Step 6 browser
 journey for sign-in, scoped deal workspaces, the V1 synthetic diligence run, evidence and financial
 review, the human approval gate, and the final report. It uses the persistent, encrypted, and
-deal-isolated pilot services from Steps 4–5. Real VDR upload remains intentionally unavailable until
-Step 7 adds its required document-processing controls.
+deal-isolated pilot services from Steps 4–5. Step 7 adds the real-document intake and transparent
+processing inventory while preserving the synthetic label on the current analysis run.
+
+The Step 7 document inventory now accepts supported real files and makes indexed, partial, failed,
+and rejected outcomes visible. Accepted sources are encrypted and converted to durable deal-scoped
+chunks, but the V1 analysis button deliberately continues to use the labelled synthetic VDR until a
+later stage verifies the real-evidence retrieval and model-control boundary.
 
 ## Specialist Diligence and Investigation
 
