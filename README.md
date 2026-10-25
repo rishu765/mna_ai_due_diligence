@@ -13,6 +13,14 @@ This repository contains an evidence-first assistant for investigating a target-
 organizing materials, finding conflicts and gaps, supporting specialist analysis, quantifying
 deterministic adjustments, and preparing an auditable diligence report for human approval.
 
+The immutable standalone V1 baseline is recorded in
+[V1 Baseline](docs/V1_BASELINE.md). Controlled pilot development follows the locked
+[Pilot Implementation Plan](docs/PILOT_IMPLEMENTATION_PLAN.md) and
+[Pilot Scope](docs/PILOT_SCOPE.md). V1 remains a tested portfolio prototype; these pilot documents
+do not represent a claim of enterprise production readiness.
+The proposed finance-reviewer journey and screen contracts are documented in
+[Pilot UX and Wireframes](docs/PILOT_UX.md).
+
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
 evaluation, and a reproducible demo. M3 adds evidence-bound financial observations, source
