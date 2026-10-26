@@ -90,6 +90,15 @@ class PilotRunService:
             raise KeyError(f"run not found: {run_id}")
         return self._application.state(thread_id=run_id)
 
+    def latest_state(self, *, deal_id: str) -> tuple[str, WorkflowState] | None:
+        record = self._database.get_latest_run(deal_id)
+        if record is None:
+            return None
+        state = self._application.state(thread_id=record.run_id)
+        if not state:
+            raise RuntimeError(f"workflow checkpoint is unavailable for run {record.run_id}")
+        return record.run_id, state
+
     def resume(
         self,
         *,

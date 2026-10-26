@@ -452,6 +452,29 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             ) from error
         return draft.payload(ai.policy)
 
+    @app.get("/pilot/deals/{deal_id}/runs/latest", response_model=None)
+    def get_latest_run(
+        deal_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object] | Response:
+        runs = _runs_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+            latest = runs.latest_state(deal_id=deal_id)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        except RuntimeError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="persisted run checkpoint is unavailable",
+            ) from error
+        if latest is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        run_id, state = latest
+        return run_payload(run_id, state)
+
     @app.get("/pilot/deals/{deal_id}/runs/{run_id}")
     def get_run(
         deal_id: str,

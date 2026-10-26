@@ -115,7 +115,7 @@
     pageContent.focus();
   }
 
-  function setDeal(dealId) {
+  async function setDeal(dealId) {
     state.deal = state.deals.find((deal) => deal.deal_id === dealId);
     state.documents = [];
     state.methodology = null;
@@ -126,6 +126,14 @@
     document.querySelectorAll(".nav-item").forEach((item) => {
       if (item.dataset.route !== "deals") item.disabled = false;
     });
+    pageContent.innerHTML = loading("Restoring the latest persisted run…");
+    try {
+      state.run = await api(`/pilot/deals/${dealId}/runs/latest`);
+      if (state.run) state.deal.status = state.run.status;
+    } catch (failure) {
+      toast(failure.message, true);
+    }
+    if (!state.deal || state.deal.deal_id !== dealId) return;
     route("overview");
   }
 

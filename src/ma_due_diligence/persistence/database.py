@@ -742,6 +742,20 @@ class PilotDatabase:
             ).fetchone()
         return None if row is None else _run_from_row(row)
 
+    def get_latest_run(self, deal_id: str) -> PilotRunRecord | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM pilot_runs
+                WHERE deal_id = ?
+                ORDER BY updated_at DESC, run_id DESC
+                LIMIT 1
+                """,
+                (deal_id,),
+            ).fetchone()
+        return None if row is None else _run_from_row(row)
+
     def add_artifact(self, record: PilotArtifactRecord) -> None:
         try:
             with self._connection() as connection:
