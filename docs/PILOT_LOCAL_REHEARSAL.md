@@ -51,13 +51,32 @@ Remediation:
 
 A regression test verifies the exact Apex date and source excerpt.
 
+### PILOT-OBS-004 — persisted runs were not discoverable after restart
+
+The pilot database and encrypted LangGraph checkpoint retained the completed run, but the browser
+cleared its in-memory run identifier when a deal was reopened. The API required a known run ID and
+offered no deal-scoped latest-run lookup, so durable state appeared to be missing after a process or
+container restart.
+
+Remediation:
+
+- the pilot database exposes the latest run for a deal using deterministic update-time ordering;
+- the run service rehydrates that run from its encrypted LangGraph checkpoint;
+- a deal-scoped `GET /pilot/deals/{deal_id}/runs/latest` endpoint returns the restored run or `204`
+  when no run exists; and
+- the browser restores the latest persisted run whenever a deal workspace is opened.
+
+A restart regression test closes the complete pilot runtime, creates a new runtime over the same
+database and checkpoint files, and verifies that the original 14-finding review checkpoint is
+returned with the same run ID.
+
 ## Verification
 
 The remediation branch passes:
 
 - dependency consistency, Ruff lint, and Ruff format checks;
 - strict mypy across 105 source files;
-- 155 tests with 86.12% branch-aware coverage; and
+- 156 tests with 86.15% branch-aware coverage; and
 - all 14 deterministic evaluation scenarios.
 
 The corrected build still requires a fresh manual local rehearsal after merge. Step 13 remains open

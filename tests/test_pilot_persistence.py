@@ -203,6 +203,7 @@ def test_database_persists_deal_document_run_artifact_and_audit(tmp_path: Path) 
     assert reopened.get_deal(deal.deal_id) == deal
     assert reopened.get_document(deal.deal_id, document.document_id) == document
     assert reopened.get_run(deal.deal_id, run.run_id) == run
+    assert reopened.get_latest_run(deal.deal_id) == run
     assert reopened.list_artifacts(deal.deal_id, run.run_id) == (artifact,)
     assert reopened.list_audit_events(deal.deal_id) == (audit,)
     assert reopened.list_documents_by_checksum(deal.deal_id, blob.plaintext_sha256) == (document,)
@@ -227,6 +228,7 @@ def test_database_queries_and_foreign_keys_preserve_deal_scope(tmp_path: Path) -
     database.save_run(run)
 
     assert database.get_run(second.deal_id, run.run_id) is None
+    assert database.get_latest_run(second.deal_id) is None
     with pytest.raises(PersistenceConflictError, match="another deal"):
         database.save_run(replace(run, deal_id=second.deal_id))
 

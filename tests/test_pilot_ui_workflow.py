@@ -106,6 +106,8 @@ def test_packaged_ui_is_served_with_accessible_sign_in(tmp_path: Path) -> None:
     assert script.status_code == 200
     assert "Evidence ID" in script.text
     assert "evidenceLocator" in script.text
+    assert "/runs/latest" in script.text
+    assert "Restoring the latest persisted run" in script.text
     assert styles.status_code == 200
 
 
@@ -140,9 +142,80 @@ def test_runtime_bootstraps_configured_administrator(
     assert response.json()["user"]["is_pilot_admin"] is True
 
 
+def test_latest_run_is_rehydrated_after_application_restart(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "MADD_CHECKPOINT_KEY",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    monkeypatch.setenv(
+        "MADD_DOCUMENT_KEY",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    monkeypatch.setenv("MADD_BOOTSTRAP_ADMIN_EMAIL", "pilot@example.com")
+    monkeypatch.setenv("MADD_BOOTSTRAP_ADMIN_PASSWORD", "pilot password long enough")
+    data_directory = tmp_path / "pilot-data"
+
+    first_runtime = PilotApplicationRuntime(data_directory)
+    try:
+        first_client = TestClient(first_runtime.app)
+        login = first_client.post(
+            "/pilot/auth/login",
+            json={"email": "pilot@example.com", "password": "pilot password long enough"},
+        )
+        headers = _headers(str(login.json()["access_token"]))
+        created = first_client.post(
+            "/pilot/deals",
+            headers=headers,
+            json={
+                "name": "Project Northstar",
+                "target_name": "SecureTech",
+                "buyer_name": "Northstar Holdings",
+                "transaction_type": "acquisition",
+                "reporting_currency": "GBP",
+                "as_of_date": "2026-06-30",
+                "workstreams": [
+                    "financial",
+                    "commercial",
+                    "legal_contractual",
+                    "operational",
+                ],
+            },
+        )
+        deal_id = str(created.json()["deal_id"])
+        paused = first_client.post(f"/pilot/deals/{deal_id}/runs", headers=headers)
+        assert paused.status_code == 201
+        run_id = str(paused.json()["run_id"])
+    finally:
+        first_runtime.close()
+
+    second_runtime = PilotApplicationRuntime(data_directory)
+    try:
+        second_client = TestClient(second_runtime.app)
+        login = second_client.post(
+            "/pilot/auth/login",
+            json={"email": "pilot@example.com", "password": "pilot password long enough"},
+        )
+        latest = second_client.get(
+            f"/pilot/deals/{deal_id}/runs/latest",
+            headers=_headers(str(login.json()["access_token"])),
+        )
+    finally:
+        second_runtime.close()
+
+    assert latest.status_code == 200
+    assert latest.json()["run_id"] == run_id
+    assert latest.json()["status"] == "review_required"
+    assert latest.json()["finding_count"] == 14
+
+
 def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path: Path) -> None:
     client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
     headers = _headers(token)
+
+    assert client.get("/pilot/deals/deal-a/runs/latest", headers=headers).status_code == 204
 
     started = client.post("/pilot/deals/deal-a/runs", headers=headers)
     assert started.status_code == 201
@@ -152,6 +225,9 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
     assert paused["finding_count"] == 14
     assert paused["findings"]
     assert paused["financial"]["adjusted_ebitda"] == "15"
+    latest = client.get("/pilot/deals/deal-a/runs/latest", headers=headers)
+    assert latest.status_code == 200
+    assert latest.json()["run_id"] == paused["run_id"]
     revenue_finding = next(
         item for item in paused["findings"] if item["title"] == "Material revenue discrepancy"
     )
