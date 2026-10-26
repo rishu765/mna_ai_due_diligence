@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const state = { token: null, user: null, deals: [], deal: null, documents: [], methodology: null, run: null, report: null };
+  const state = { token: null, user: null, deals: [], deal: null, documents: [], methodology: null, run: null, reviewHistory: null, report: null };
   const loginView = document.querySelector("#login-view");
   const application = document.querySelector("#application");
   const pageContent = document.querySelector("#page-content");
@@ -82,6 +82,7 @@
     state.documents = [];
     state.methodology = null;
     state.run = null;
+    state.reviewHistory = null;
     state.report = null;
     application.hidden = true;
     loginView.hidden = false;
@@ -118,6 +119,7 @@
     state.documents = [];
     state.methodology = null;
     state.run = null;
+    state.reviewHistory = null;
     state.report = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
       if (item.dataset.route !== "deals") item.disabled = false;
@@ -129,6 +131,7 @@
     state.deal = null;
     state.documents = [];
     state.run = null;
+    state.reviewHistory = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
       if (item.dataset.route !== "deals") item.disabled = true;
     });
@@ -282,6 +285,7 @@
     pageContent.insertAdjacentHTML("beforeend", loading("Processing the synthetic VDR through all four workstreams…"));
     try {
       state.run = await api(`/pilot/deals/${state.deal.deal_id}/runs`, { method: "POST" });
+      state.reviewHistory = null;
       toast("Analysis paused at the human-review checkpoint.");
       route("analysis");
     } catch (failure) {
@@ -346,57 +350,111 @@
     return `<details class="methodology-rule"><summary><span>${indicator}</span><strong>${escapeHtml(title)}</strong></summary><p><strong>Formula:</strong> ${escapeHtml(formula)}</p><div class="calculation-lines">${lines.map((line) => `<div><span>${escapeHtml(line.operation)} ${escapeHtml(line.label)}<small>Source ${escapeHtml(line.source_ids.join(", ") || "not available")} · evidence ${escapeHtml(line.evidence_ids.join(", ") || "not available")}</small></span><strong>${escapeHtml(line.amount)}</strong></div>`).join("")}</div><p><strong>Result:</strong> ${escapeHtml(result ?? "unknown")} · ${conclusion}</p></details>`;
   }
 
-  function renderReview() {
+  async function renderReview() {
     setHeading(`Deals / ${state.deal.name}`, "Review queue");
     if (!state.run) {
       pageContent.innerHTML = empty("✓", "Nothing to review", "Start an analysis run to create the material-review queue.", "Open analysis", "analysis");
       bindRouteButtons();
       return;
     }
+    if (!state.reviewHistory) {
+      try {
+        state.reviewHistory = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/review-history`);
+      } catch (failure) {
+        pageContent.innerHTML = `<p class="form-error">${escapeHtml(failure.message)}</p>`;
+        return;
+      }
+    }
     const required = state.run.review_required;
+    const findingDecisions = state.run.findings.map((finding) => `
+      <article class="review-decision" data-finding-id="${escapeHtml(finding.finding_id)}">
+        <div class="review-decision-heading"><div><span class="severity severity-${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span><h3>${escapeHtml(finding.title)}</h3></div><small>${escapeHtml(pretty(finding.workstream))} · ${finding.evidence.length} evidence item(s)</small></div>
+        <div class="review-fields">
+          <label>Decision<select class="review-action" required><option value="">Choose a disposition</option><option value="approve_finding">Approve finding</option><option value="reject_finding">Reject finding</option><option value="change_severity">Change severity</option><option value="mark_nonmaterial">Mark non-material</option><option value="request_more_evidence">Request more evidence</option></select></label>
+          <label class="review-severity-field" hidden>Revised severity<select class="review-severity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+        </div>
+        <label>Decision rationale<textarea class="review-rationale" rows="2" maxlength="2000" placeholder="State what you reviewed and why this disposition is appropriate." required></textarea></label>
+      </article>`).join("");
+    const conflictDecisions = state.run.conflicts
+      .filter((conflict) => state.run.review_conflict_ids.includes(conflict.conflict_id))
+      .map((conflict) => `<article class="review-decision" data-conflict-id="${escapeHtml(conflict.conflict_id)}"><div class="review-decision-heading"><div><span class="severity">Conflict</span><h3>${escapeHtml(conflict.topic)}</h3></div><small>${escapeHtml(conflict.conflict_id)} · ${conflict.observation_fact_ids.length} source claims</small></div><div class="review-fields"><label>Preferred source<select class="review-source" required><option value="">Choose the controlling source</option>${conflict.observation_fact_ids.map((sourceId) => `<option value="${escapeHtml(sourceId)}">${escapeHtml(sourceId)}</option>`).join("")}</select></label></div><label>Resolution rationale<textarea class="review-rationale" rows="2" maxlength="2000" placeholder="Explain why this source should control final presentation." required></textarea></label></article>`).join("");
+    const history = reviewHistory(state.reviewHistory.events);
     pageContent.innerHTML = `
       <div class="page-heading"><div><h2>Human review gate</h2><p>Material ambiguity must be explicitly dispositioned before report release.</p></div>${status(state.run.status)}</div>
       <section class="panel">
-        ${required ? `<div class="warning-box">${state.run.review_reasons.length} policy reasons currently block final report release.</div>` : `<div class="warning-box">Review has been completed and retained in the workflow audit trail.</div>`}
-        <div class="review-list">${state.run.review_reasons.map((reason) => `<div class="review-row"><span>${escapeHtml(reason)}</span><span class="status">Required</span></div>`).join("") || '<p class="muted">No open review reasons.</p>'}</div>
-        ${required ? '<label>Overall review rationale<textarea id="review-rationale" rows="3">Reviewed the cited evidence and approved supported findings for this controlled demonstration.</textarea></label><button id="complete-review" class="button button-primary" type="button">Approve required items and resolve conflicts</button>' : '<button class="button button-secondary" data-action="report" type="button">Open report</button>'}
-      </section>`;
+        ${required ? `<div class="warning-box">${state.run.review_reasons.length} policy reasons require attention. Every released finding also needs one explicit disposition.</div>` : `<div class="warning-box">Review has been recorded in the immutable decision history.</div>`}
+        <div class="review-list">${state.run.review_reasons.map((reason) => `<div class="review-row"><span>${escapeHtml(reason)}</span><span class="status">${required ? "Required" : "Reviewed trigger"}</span></div>`).join("") || '<p class="muted">No review triggers were recorded.</p>'}</div>
+      </section>
+      ${required ? `<section class="panel"><h3>Finding dispositions</h3><p class="muted">Review each finding independently. A request for more evidence records the request and prevents report release.</p><div class="review-decision-list">${findingDecisions}${conflictDecisions}</div><label>Overall review comment<textarea id="review-overall-rationale" rows="3" maxlength="2000" placeholder="Summarize the review performed across the complete findings set." required></textarea></label><button id="complete-review" class="button button-primary" type="button">Record decisions and apply review</button></section>` : state.run.report_available ? '<section class="panel"><button class="button button-secondary" data-action="report" type="button">Open reviewed report</button></section>' : '<section class="panel"><div class="warning-box">The run is waiting for requested information. No report has been released.</div></section>'}
+      <section class="panel"><div class="page-heading"><div><h3>Immutable decision history</h3><p>${state.reviewHistory.event_count} append-only event(s) retained for this run.</p></div></div>${history}</section>`;
+    document.querySelectorAll(".review-action").forEach((select) => select.addEventListener("change", () => {
+      const severityField = select.closest(".review-decision").querySelector(".review-severity-field");
+      severityField.hidden = select.value !== "change_severity";
+    }));
     document.querySelector("#complete-review")?.addEventListener("click", completeReview);
     bindRouteButtons();
   }
 
   async function completeReview(event) {
     const button = event.currentTarget;
+    const rationale = document.querySelector("#review-overall-rationale").value.trim();
+    const decisions = [];
+    for (const card of document.querySelectorAll("[data-finding-id]")) {
+      const action = card.querySelector(".review-action").value;
+      const decisionRationale = card.querySelector(".review-rationale").value.trim();
+      if (!action || !decisionRationale || !rationale) {
+        toast("Choose a decision and provide rationale for every finding, plus the overall review comment.", true);
+        return;
+      }
+      const decision = { subject_type: "finding", subject_id: card.dataset.findingId, action, rationale: decisionRationale };
+      if (action === "change_severity") decision.severity = card.querySelector(".review-severity").value;
+      decisions.push(decision);
+    }
+    for (const card of document.querySelectorAll("[data-conflict-id]")) {
+      const sourceId = card.querySelector(".review-source").value;
+      const decisionRationale = card.querySelector(".review-rationale").value.trim();
+      if (!sourceId || !decisionRationale) {
+        toast("Select a controlling source and provide rationale for every required conflict.", true);
+        return;
+      }
+      decisions.push({
+        subject_type: "conflict",
+        subject_id: card.dataset.conflictId,
+        action: "resolve_conflict",
+        rationale: decisionRationale,
+        preferred_source_id: sourceId,
+      });
+    }
     button.disabled = true;
     button.textContent = "Applying review…";
-    const rationale = document.querySelector("#review-rationale").value;
-    const decisions = state.run.review_finding_ids.map((findingId) => ({
-      subject_type: "finding",
-      subject_id: findingId,
-      action: "approve_finding",
-      rationale: "Reviewer inspected the cited evidence and approved this candidate finding.",
-    }));
-    state.run.conflicts
-      .filter((conflict) => state.run.review_conflict_ids.includes(conflict.conflict_id))
-      .forEach((conflict) => decisions.push({
-        subject_type: "conflict",
-        subject_id: conflict.conflict_id,
-        action: "resolve_conflict",
-        rationale: "Reviewer selected the direct source for final presentation.",
-        preferred_source_id: conflict.observation_fact_ids[0],
-      }));
     try {
       state.run = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/review`, {
         method: "POST",
         body: JSON.stringify({ rationale, decisions }),
       });
-      state.report = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/report`);
-      toast("Review recorded and report generated.");
-      route("report");
+      state.reviewHistory = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/review-history`);
+      if (state.run.report_available) {
+        state.report = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/report`);
+        toast("Review history recorded and report generated.");
+        route("report");
+      } else {
+        toast("Review history recorded; the run is waiting for requested information.");
+        route("review");
+      }
     } catch (failure) {
       toast(failure.message, true);
       route("review");
     }
+  }
+
+  function reviewHistory(events) {
+    if (!events.length) return '<div class="empty-history"><p>No decisions have been recorded yet.</p></div>';
+    return `<div class="decision-history">${events.map((item) => `<article><div><span class="status">${escapeHtml(pretty(item.event_type))}</span><strong>${escapeHtml(item.subject_type)} · ${escapeHtml(item.subject_id)}</strong></div><p>${escapeHtml(item.rationale)}</p><small>${escapeHtml(item.actor_display_name)} · ${escapeHtml(item.occurred_at)}${Object.keys(item.prior_state).length ? ` · ${escapeHtml(stateTransition(item.prior_state, item.resulting_state))}` : ""}</small></article>`).join("")}</div>`;
+  }
+
+  function stateTransition(prior, resulting) {
+    const keys = [...new Set([...Object.keys(prior), ...Object.keys(resulting)])];
+    return keys.map((key) => `${pretty(key)}: ${prior[key] ?? "—"} → ${resulting[key] ?? "—"}`).join(" · ");
   }
 
   async function renderReport() {
@@ -452,7 +510,7 @@
 
   function findingList(findings) {
     if (!findings.length) return '<div class="panel"><p class="muted">No findings returned.</p></div>';
-    return `<div class="finding-list">${findings.map((item) => `<details class="finding" data-severity="${escapeHtml(item.severity)}"><summary><span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(pretty(item.workstream))} · ${escapeHtml(pretty(item.support_status))}</p></span><span>＋</span></summary><div class="evidence"><p>${escapeHtml(item.description)}</p>${item.evidence.map((evidence) => `<blockquote><strong>${escapeHtml(evidence.document_id || "Source")}</strong>${evidence.pages.length ? ` · page ${evidence.pages.join(", ")}` : ""}<br>${escapeHtml(evidence.source_text || "Evidence reference retained in the workflow.")}</blockquote>`).join("")}</div></details>`).join("")}</div>`;
+    return `<div class="finding-list">${findings.map((item) => `<details class="finding" data-severity="${escapeHtml(item.severity)}"><summary><span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(pretty(item.workstream))} · ${escapeHtml(pretty(item.support_status))} · ${escapeHtml(pretty(item.status))} · ${escapeHtml(pretty(item.analyst_review_status))}</p></span><span>＋</span></summary><div class="evidence"><p>${escapeHtml(item.description)}</p>${item.evidence.map((evidence) => `<blockquote><strong>${escapeHtml(evidence.document_id || "Source")}</strong>${evidence.pages.length ? ` · page ${evidence.pages.join(", ")}` : ""}<br>${escapeHtml(evidence.source_text || "Evidence reference retained in the workflow.")}</blockquote>`).join("")}</div></details>`).join("")}</div>`;
   }
 
   function priorityFindings(findings) { return `<section class="panel"><h3>Priority findings</h3>${findingList(findings)}</section>`; }

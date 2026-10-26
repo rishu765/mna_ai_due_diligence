@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, 
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from ma_due_diligence.domain import ReviewActionType
 from ma_due_diligence.financial.methodology import engagement_methodology_payload
 from ma_due_diligence.persistence import PilotDatabase, PilotDealRecord
 from ma_due_diligence.security import (
@@ -20,14 +21,14 @@ from ma_due_diligence.security import (
 )
 from ma_due_diligence.security.service import PilotAuthService
 from ma_due_diligence.workflow_final import HumanReviewSubmission, ReviewDecision
-from ma_due_diligence.workflow_final.models import WorkflowStatus
+from ma_due_diligence.workflow_final.models import WorkflowState, WorkflowStatus
 
 from .pilot_documents import (
     PilotDocumentProcessingService,
     UploadRejectedError,
     document_payload,
 )
-from .pilot_runs import PilotRunService, run_payload
+from .pilot_runs import PilotRunService, review_history_payload, run_payload
 from .pilot_schemas import (
     AssignDealRoleRequest,
     CreatePilotDealRequest,
@@ -344,6 +345,7 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             existing = runs.state(deal_id=deal_id, run_id=run_id)
             if existing.get("status") is not WorkflowStatus.REVIEW_REQUIRED:
                 raise HTTPException(status_code=409, detail="run is not awaiting review")
+            _validate_complete_review(existing, payload)
             decisions = tuple(
                 ReviewDecision(
                     item.subject_type,
@@ -358,6 +360,7 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             state = runs.resume(
                 deal_id=deal_id,
                 run_id=run_id,
+                actor_id=authenticated.user_id,
                 submission=HumanReviewSubmission(
                     authenticated.display_name,
                     payload.rationale,
@@ -376,6 +379,22 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return run_payload(run_id, state)
+
+    @app.get("/pilot/deals/{deal_id}/runs/{run_id}/review-history")
+    def get_review_history(
+        deal_id: str,
+        run_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object]:
+        runs = _runs_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+            events = runs.review_history(deal_id=deal_id, run_id=run_id)
+        except (AuthorizationError, KeyError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+            ) from error
+        return review_history_payload(events)
 
     @app.get(
         "/pilot/deals/{deal_id}/runs/{run_id}/report",
@@ -425,6 +444,53 @@ def _deal_payload(deal: PilotDealRecord) -> dict[str, object]:
         "notes": deal.notes,
         "status": deal.status,
     }
+
+
+def _validate_complete_review(
+    state: WorkflowState,
+    payload: PilotReviewSubmissionRequest,
+) -> None:
+    coordinator = state.get("specialist_result")
+    request = state.get("review_request")
+    if coordinator is None or request is None:
+        raise ValueError("review context is unavailable")
+    subjects = [(item.subject_type, item.subject_id) for item in payload.decisions]
+    if len(subjects) != len(set(subjects)):
+        raise ValueError("each review subject may be decided only once")
+    if any(subject_type not in {"finding", "conflict"} for subject_type, _ in subjects):
+        raise ValueError("review decisions support findings and required conflicts only")
+    finding_actions = {
+        ReviewActionType.APPROVE_FINDING,
+        ReviewActionType.REJECT_FINDING,
+        ReviewActionType.CHANGE_SEVERITY,
+        ReviewActionType.MARK_NONMATERIAL,
+        ReviewActionType.REQUEST_MORE_EVIDENCE,
+    }
+    for item in payload.decisions:
+        if item.subject_type == "finding" and item.action not in finding_actions:
+            raise ValueError(f"action {item.action.value} is invalid for a finding")
+        if item.subject_type == "conflict" and item.action is not ReviewActionType.RESOLVE_CONFLICT:
+            raise ValueError("conflicts may only be resolved")
+    expected_findings = {item.finding.finding_id for item in coordinator.findings}
+    submitted_findings = {
+        subject_id for subject_type, subject_id in subjects if subject_type == "finding"
+    }
+    if submitted_findings != expected_findings:
+        missing = sorted(expected_findings - submitted_findings)
+        unexpected = sorted(submitted_findings - expected_findings)
+        raise ValueError(
+            f"every released finding requires one decision; missing={missing}, unexpected={unexpected}"
+        )
+    expected_conflicts = set(request.conflict_ids)
+    submitted_conflicts = {
+        subject_id for subject_type, subject_id in subjects if subject_type == "conflict"
+    }
+    if submitted_conflicts != expected_conflicts:
+        missing = sorted(expected_conflicts - submitted_conflicts)
+        unexpected = sorted(submitted_conflicts - expected_conflicts)
+        raise ValueError(
+            f"every required conflict requires one resolution; missing={missing}, unexpected={unexpected}"
+        )
 
 
 def _runs_or_503(context: PilotApiContext) -> PilotRunService:

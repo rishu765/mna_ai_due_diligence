@@ -15,8 +15,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 6 | Build the minimum UI | Complete |
 | 7 | Strengthen document processing | Complete |
 | 8 | Formalize financial methodologies | Complete |
-| 9 | Connect review actions and audit history | Next |
-| 10–17 | Remaining locked sequence below | Not started |
+| 9 | Connect review actions and audit history | Complete |
+| 10 | Add report and Excel exports | Next |
+| 11–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -92,6 +93,11 @@ without changing V1 arithmetic.
 - Persist approval, rejection, edit, severity, comment, assignment, and information-request events.
 
 Exit: every released finding has a complete immutable decision history.
+
+Implemented through the complete per-finding disposition workflow and append-only event register
+documented in [`PILOT_REVIEW_AND_AUDIT.md`](PILOT_REVIEW_AND_AUDIT.md). Report release requires one
+decision for every finding plus every policy-required conflict; the database atomically retains
+assignment, comment, approval, rejection, edit, severity, information-request, and conflict events.
 
 ## 10. Add report and Excel exports
 
