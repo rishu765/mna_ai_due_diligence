@@ -79,6 +79,17 @@ The remediation branch passes:
 - 156 tests with 86.15% branch-aware coverage; and
 - all 14 deterministic evaluation scenarios.
 
-The corrected build still requires a fresh manual local rehearsal after merge. Step 13 remains open
-until its live HTTPS, monitoring, backup/restore, and invited-reviewer acceptance criteria pass; only
-then can the formal Step 14 pilot begin.
+After the remediations were merged, the local container was rebuilt from merge commit
+`3edb3bab886a87ed79eb4f84fb5433350f491710` while retaining the existing encrypted data volume. The
+previous completed run rehydrated automatically with its 25 documents, 14 findings, 39 immutable
+audit events, 19 review actions, and released report.
+
+A separate post-fix workspace then completed the full workflow from fresh analysis through human
+review and report release. Manual checks confirmed that the Apex customer expiry is 31 December
+2027, finding evidence exposes identifiers, locators, and quantitative source text, and the local
+controlled-AI draft cites all four available concentration evidence items. The released state again
+contained 14 findings, 79 citation instances, 19 review actions, and zero unsupported material
+conclusions.
+
+Step 13 remains open until its live HTTPS, monitoring, backup/restore, and invited-reviewer acceptance
+criteria pass; only then can the formal Step 14 pilot begin.
