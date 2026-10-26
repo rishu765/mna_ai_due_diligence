@@ -104,6 +104,8 @@ def test_packaged_ui_is_served_with_accessible_sign_in(tmp_path: Path) -> None:
     assert "DealLens" in response.text
     assert "Sign in to your deal workspace" in response.text
     assert script.status_code == 200
+    assert "Evidence ID" in script.text
+    assert "evidenceLocator" in script.text
     assert styles.status_code == 200
 
 
@@ -150,6 +152,17 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
     assert paused["finding_count"] == 14
     assert paused["findings"]
     assert paused["financial"]["adjusted_ebitda"] == "15"
+    revenue_finding = next(
+        item for item in paused["findings"] if item["title"] == "Material revenue discrepancy"
+    )
+    assert {item["evidence_id"] for item in revenue_finding["evidence"]} == {
+        "ev-audited",
+        "ev-deck",
+        "ev-management",
+        "ev-sales",
+    }
+    assert any("Revenue GBP 92.0m" in item["source_text"] for item in revenue_finding["evidence"])
+    assert all("chunk_id" in item and "cell_range" in item for item in revenue_finding["evidence"])
 
     decisions = [
         {

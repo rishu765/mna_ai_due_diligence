@@ -89,7 +89,9 @@ persisted in draft artifacts, included in audit events, or sent to the browser.
 `MADD_AI_MODE=local_demo` is the default controlled-pilot setting. It uses a deterministic grounded
 template over the synthetic V1 finding evidence. This makes the entire approval, citation, budget,
 provenance, persistence, and UI path testable without network transfer or a provider credential. It
-is not represented as a generative model.
+is not represented as a generative model. The template cites every bounded evidence item and includes
+a length-bounded digest of its source, locator, and excerpt so quantitative facts remain visible in
+the editable candidate without expanding the provider's authority.
 
 ### Disabled mode
 

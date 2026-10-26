@@ -77,6 +77,12 @@ def test_commercial_analysis_is_grounded_and_does_not_claim_market_research(
     categories = {item.finding.category for item in commercial.findings}
     assert {"customer_concentration", "customer_renewal", "growth_sustainability"} <= categories
     assert all(item.finding.evidence for item in commercial.findings)
+    renewal = next(
+        item.finding for item in commercial.findings if item.finding.category == "customer_renewal"
+    )
+    assert renewal.description == "A material customer contract expires on 2027-12-31."
+    assert renewal.evidence[0].source_text is not None
+    assert "31 December 2027" in renewal.evidence[0].source_text
     assert "External market research was not performed" in commercial.warnings[0]
 
 

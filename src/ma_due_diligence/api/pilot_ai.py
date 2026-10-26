@@ -211,10 +211,12 @@ class LocalGroundedDraftProvider:
         request: GroundedDraftRequest,
         policy: AiProviderPolicy,
     ) -> GroundedDraftCandidate:
-        citations = tuple(item.evidence_id for item in request.evidence[:3])
+        citations = tuple(item.evidence_id for item in request.evidence)
+        evidence_digest = _bounded_evidence_digest(request.evidence)
         narrative = (
             f"The available evidence supports reviewer consideration of this finding: "
-            f"{request.description} The proposed disposition should reflect the stated "
+            f"{request.description} Evidence reviewed: {evidence_digest}. "
+            "The proposed disposition should reflect the stated "
             f"{request.severity} severity, {request.support_status} support status, and any "
             "remaining uncertainty."
         )
@@ -621,6 +623,20 @@ def _locator(evidence: Any) -> str:
 
 def _canonical_request(request: GroundedDraftRequest) -> str:
     return json.dumps(request.provider_payload(), sort_keys=True, separators=(",", ":"))
+
+
+def _bounded_evidence_digest(
+    evidence: tuple[GroundedEvidence, ...],
+    *,
+    max_chars: int = 400,
+) -> str:
+    per_item = max(40, max_chars // len(evidence))
+    parts = []
+    for item in evidence:
+        text = " ".join(item.text.split())
+        excerpt = text if len(text) <= per_item else text[: per_item - 1].rstrip() + "…"
+        parts.append(f"{item.evidence_id} ({item.source}; {item.locator}): {excerpt}")
+    return "; ".join(parts)[:max_chars].rstrip()
 
 
 def _estimate_tokens(value: str) -> int:

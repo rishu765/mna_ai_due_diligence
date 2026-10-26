@@ -34,7 +34,7 @@ COMMERCIAL_PLAN = RetrievalPlan(
     ),
     (
         "largest customer Apex represents revenue concentration",
-        "customer churn retention renewal expiry",
+        "customer contract agreement expires renewal expiry date",
         "pricing growth forecast actual",
     ),
     top_k_per_query=10,
