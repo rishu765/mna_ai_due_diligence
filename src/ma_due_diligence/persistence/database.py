@@ -760,6 +760,42 @@ class PilotDatabase:
                 f"artifact cannot be stored for deal {record.deal_id}: {record.artifact_id}"
             ) from error
 
+    def add_artifact_with_audit(
+        self,
+        record: PilotArtifactRecord,
+        event: PilotAuditEvent,
+    ) -> None:
+        """Atomically retain a derived artifact and its creation event."""
+
+        if event.deal_id != record.deal_id:
+            raise ValueError("artifact and audit event must belong to the same deal")
+        if event.object_type != "artifact" or event.object_id != record.artifact_id:
+            raise ValueError("artifact audit event must identify the stored artifact")
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO pilot_artifacts (
+                        artifact_id, deal_id, run_id, kind, payload_json,
+                        schema_version, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.artifact_id,
+                        record.deal_id,
+                        record.run_id,
+                        record.kind.value,
+                        _json_dumps(record.payload),
+                        record.schema_version,
+                        record.created_at.isoformat(),
+                    ),
+                )
+                _append_audit_event(connection, event)
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError(
+                f"artifact cannot be stored for deal {record.deal_id}: {record.artifact_id}"
+            ) from error
+
     def list_artifacts(
         self,
         deal_id: str,

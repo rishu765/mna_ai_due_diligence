@@ -23,6 +23,13 @@ from ma_due_diligence.security.service import PilotAuthService
 from ma_due_diligence.workflow_final import HumanReviewSubmission, ReviewDecision
 from ma_due_diligence.workflow_final.models import WorkflowState, WorkflowStatus
 
+from .pilot_ai import (
+    AiBudgetError,
+    AiOutputValidationError,
+    AiPolicyError,
+    AiProviderError,
+    ControlledAiDraftService,
+)
 from .pilot_documents import (
     PilotDocumentProcessingService,
     UploadRejectedError,
@@ -51,6 +58,7 @@ class PilotApiContext:
     auth: PilotAuthService
     runs: PilotRunService | None = None
     documents: PilotDocumentProcessingService | None = None
+    ai: ControlledAiDraftService | None = None
 
 
 def create_pilot_app(context: PilotApiContext) -> FastAPI:
@@ -187,6 +195,23 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             materiality_threshold=deal.materiality_threshold,
         )
 
+    @app.get("/pilot/deals/{deal_id}/ai-policy")
+    def get_ai_policy(
+        deal_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object]:
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+        except AuthorizationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="deal not found"
+            ) from error
+        if context.database.get_deal(deal_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="deal not found")
+        if context.ai is None:
+            return {"enabled": False, "human_approval_required": True}
+        return context.ai.policy.payload()
+
     @app.put(
         "/pilot/deals/{deal_id}/memberships",
         response_model=DealMembershipResponse,
@@ -317,6 +342,54 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             ) from error
         return run_payload(state["request"].run_id, state)
 
+    @app.post(
+        "/pilot/deals/{deal_id}/runs/{run_id}/ai-drafts/findings/{finding_id}",
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_ai_finding_draft(
+        deal_id: str,
+        run_id: str,
+        finding_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> dict[str, object]:
+        runs = _runs_or_503(context)
+        ai = _ai_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.FINDING_DRAFT)
+            state = runs.state(deal_id=deal_id, run_id=run_id)
+            draft = ai.create_finding_draft(
+                deal_id=deal_id,
+                run_id=run_id,
+                finding_id=finding_id,
+                actor_id=authenticated.user_id,
+                state=state,
+            )
+        except (AuthorizationError, KeyError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+            ) from error
+        except AiBudgetError as error:
+            raise HTTPException(
+                status_code=429,
+                detail={"code": error.code, "message": str(error)},
+            ) from error
+        except AiPolicyError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": error.code, "message": str(error)},
+            ) from error
+        except AiOutputValidationError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": error.code, "message": str(error)},
+            ) from error
+        except AiProviderError as error:
+            raise HTTPException(
+                status_code=502,
+                detail={"code": error.code, "message": str(error)},
+            ) from error
+        return draft.payload(ai.policy)
+
     @app.get("/pilot/deals/{deal_id}/runs/{run_id}")
     def get_run(
         deal_id: str,
@@ -347,6 +420,20 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             if existing.get("status") is not WorkflowStatus.REVIEW_REQUIRED:
                 raise HTTPException(status_code=409, detail="run is not awaiting review")
             _validate_complete_review(existing, payload)
+            ai_draft_ids: dict[tuple[str, str], str] = {}
+            for item in payload.decisions:
+                if item.ai_draft_id is None:
+                    continue
+                if item.subject_type != "finding":
+                    raise ValueError("AI drafts may be attached only to finding decisions")
+                ai = _ai_or_503(context)
+                ai.validate_reference(
+                    deal_id=deal_id,
+                    run_id=run_id,
+                    finding_id=item.subject_id,
+                    draft_id=item.ai_draft_id,
+                )
+                ai_draft_ids[(item.subject_type, item.subject_id)] = item.ai_draft_id
             decisions = tuple(
                 ReviewDecision(
                     item.subject_type,
@@ -368,6 +455,7 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
                     decisions,
                     datetime.now(UTC),
                 ),
+                ai_draft_ids=ai_draft_ids,
             )
         except AuthorizationError as error:
             raise HTTPException(
@@ -376,6 +464,11 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+            ) from error
+        except AiPolicyError as error:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": error.code, "message": str(error)},
             ) from error
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -558,6 +651,12 @@ def _documents_or_503(context: PilotApiContext) -> PilotDocumentProcessingServic
     if context.documents is None:
         raise HTTPException(status_code=503, detail="document service is not configured")
     return context.documents
+
+
+def _ai_or_503(context: PilotApiContext) -> ControlledAiDraftService:
+    if context.ai is None:
+        raise HTTPException(status_code=503, detail="controlled AI drafting is not configured")
+    return context.ai
 
 
 def _record_export(
