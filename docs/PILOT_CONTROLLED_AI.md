@@ -146,8 +146,9 @@ checkpoint. The UI never calls the provider automatically and never preselects a
   the repository test suite.
 - Database-derived artifacts rely on deployment-volume encryption; field-level encryption remains
   outside this step.
-- Formal prompt-injection attack suites, rate limiting, provider circuit breakers, concurrency and
-  performance tests, backup/recovery, and independent penetration review belong to Step 12.
+- Step 12 adds adversarial prompt-control output tests, login throttling, performance smoke tests,
+  and backup/recovery. Provider circuit breakers, high-concurrency load testing, and independent
+  penetration review remain deployment or external-assurance work.
 - Provider legal/commercial approval and company-specific data-classification rules cannot be
   inferred by software and remain deployment gates.
 

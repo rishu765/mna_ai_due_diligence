@@ -18,8 +18,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 9 | Connect review actions and audit history | Complete |
 | 10 | Add report and Excel exports | Complete |
 | 11 | Add controlled AI features where valuable | Complete |
-| 12 | Expand security and testing | Next |
-| 13–17 | Remaining locked sequence below | Not started |
+| 12 | Expand security and testing | Complete |
+| 13 | Deploy the pilot environment | Next |
+| 14–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -132,6 +133,12 @@ submit review, and an immutable decision links the draft only after explicit rev
   performance, browsers, and end-to-end workflows.
 
 Exit: all pilot gates pass and outstanding risks are explicitly accepted or corrected.
+
+Implemented through the HTTP boundary, login throttling, readiness check, adversarial controlled-AI
+validation, encrypted backup/restore tooling, recovery tests, bounded performance smoke test,
+coverage threshold, and consolidated gate documented in
+[`PILOT_SECURITY_TESTING.md`](PILOT_SECURITY_TESTING.md). Residual risks are explicitly limited to
+the local/internal synthetic-data gate and must be reconsidered in Step 13 before deployment.
 
 ## 13. Deploy the pilot environment
 

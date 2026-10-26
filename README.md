@@ -36,6 +36,9 @@ The Step 10 reviewed PDF, Excel findings register, financial schedules, download
 export audit fingerprints are documented in [Pilot Report and Excel Exports](docs/PILOT_EXPORTS.md).
 The Step 11 evidence-bound reviewer drafting, provider policy, validation, budget, provenance, and
 human-approval controls are documented in [Pilot Controlled AI](docs/PILOT_CONTROLLED_AI.md).
+The Step 12 HTTP hardening, login throttling, adversarial testing, encrypted backup/recovery,
+coverage gate, and accepted residual risks are documented in
+[Pilot Security and Test Gate](docs/PILOT_SECURITY_TESTING.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,

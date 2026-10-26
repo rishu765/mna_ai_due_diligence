@@ -97,15 +97,19 @@ deployment.
 
 ## Current limitations
 
-- Authentication and authorization are not implemented yet.
 - SQLite is not a multi-instance production database.
-- Backup, restoration, key rotation, secure deletion, retention automation, and storage reconciliation
-  still require implementation and operational validation.
-- The public API is not yet wired to these pilot adapters; the persistent workflow runtime is ready
-  for that integration after authentication and authorization are implemented.
-- Malware scanning, upload limits, OCR, and document-processing hardening remain later milestones.
+- Step 12 adds encrypted backup, verification, and restore tooling; scheduling, off-host custody,
+  recovery objectives, rotation, secure deletion, retention automation, and storage reconciliation
+  still require deployment-level operational validation.
+- The authenticated pilot API is wired to these adapters. SQLite remains appropriate only for the
+  single-instance controlled pilot.
+- Step 7 adds upload limits, deterministic screening, OCR/table extraction, and recoverable
+  processing status. Enterprise antivirus or sandbox scanning remains a deployment decision.
 - Database contents rely on deployment-volume encryption; application-level field encryption is not
   included in this milestone.
+
+See [Pilot Security and Test Gate](PILOT_SECURITY_TESTING.md) for the current cross-stage control
+matrix and residual risks.
 
 ## Verification
 

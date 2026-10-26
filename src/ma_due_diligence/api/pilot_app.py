@@ -1,6 +1,7 @@
 """Authenticated, deal-isolated FastAPI boundary for the controlled pilot."""
 
-from dataclasses import asdict, dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +10,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ma_due_diligence.domain import ReviewActionType
 from ma_due_diligence.financial.methodology import engagement_methodology_payload
@@ -17,7 +19,9 @@ from ma_due_diligence.security import (
     AuthenticationError,
     AuthorizationError,
     AuthPrincipal,
+    LoginThrottle,
     Permission,
+    PilotHttpSecurityPolicy,
 )
 from ma_due_diligence.security.service import PilotAuthService
 from ma_due_diligence.workflow_final import HumanReviewSubmission, ReviewDecision
@@ -59,6 +63,7 @@ class PilotApiContext:
     runs: PilotRunService | None = None
     documents: PilotDocumentProcessingService | None = None
     ai: ControlledAiDraftService | None = None
+    http_security: PilotHttpSecurityPolicy = field(default_factory=PilotHttpSecurityPolicy)
 
 
 def create_pilot_app(context: PilotApiContext) -> FastAPI:
@@ -67,6 +72,32 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         version="1.1.0-pilot",
         description="Authenticated and deal-isolated pilot boundary.",
     )
+    throttle = LoginThrottle(context.http_security)
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=list(context.http_security.allowed_hosts),
+    )
+
+    @app.middleware("http")
+    async def security_headers(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if request.url.path.startswith("/pilot/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     web_root = Path(__file__).resolve().parents[1] / "web"
     app.mount("/assets", StaticFiles(directory=web_root), name="pilot-assets")
 
@@ -88,16 +119,37 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/ready")
+    def readiness() -> dict[str, str]:
+        try:
+            ready = context.database.integrity_check()
+        except Exception as error:
+            raise HTTPException(status_code=503, detail="service is not ready") from error
+        if not ready:
+            raise HTTPException(status_code=503, detail="service is not ready")
+        return {"status": "ready", "database": "ok"}
+
     @app.get("/", include_in_schema=False)
     def pilot_interface() -> FileResponse:
         return FileResponse(web_root / "index.html")
 
     @app.post("/pilot/auth/login", response_model=PilotLoginResponse)
-    def login(payload: PilotLoginRequest) -> dict[str, object]:
+    def login(payload: PilotLoginRequest, request: Request) -> dict[str, object]:
+        client_host = "unknown" if request.client is None else request.client.host
+        throttle_key = throttle.key(payload.email, client_host)
+        retry_after = throttle.retry_after(throttle_key)
+        if retry_after is not None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="login temporarily unavailable",
+                headers={"Retry-After": str(retry_after)},
+            )
         try:
             session = context.auth.login(email=payload.email, password=payload.password)
         except AuthenticationError as error:
+            throttle.record_failure(throttle_key)
             raise _unauthorized("invalid email or password") from error
+        throttle.reset(throttle_key)
         return {
             "access_token": session.token,
             "token_type": "bearer",

@@ -31,4 +31,4 @@ jobs:
       - name: Type check
         run: python -m mypy
       - name: Test
-        run: python -m pytest
+        run: python -m pytest --cov=ma_due_diligence --cov-report=term-missing --cov-fail-under=80

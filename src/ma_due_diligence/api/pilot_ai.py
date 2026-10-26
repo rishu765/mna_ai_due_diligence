@@ -25,6 +25,11 @@ from ma_due_diligence.workflow_final.models import WorkflowState, WorkflowStatus
 
 _NUMBER = re.compile(r"(?<![A-Za-z0-9_])[-+]?\d+(?:[.,]\d+)*(?:%|[kKmMbBnN]{1,2})?(?![A-Za-z0-9_])")
 _SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9._-]{1,120}")
+_PROMPT_CONTROL = re.compile(
+    r"\b(?:ignore (?:all |the )?(?:previous|prior) instructions?|system prompt|developer message|"
+    r"authorization\s*:\s*bearer|api[_ -]?key|reveal (?:the )?(?:prompt|secret))\b",
+    re.IGNORECASE,
+)
 _USE_CASE = "finding_review_rationale"
 
 
@@ -437,6 +442,8 @@ class ControlledAiDraftService:
         unsupported_numbers = set(_NUMBER.findall(narrative)) - allowed_numbers
         if unsupported_numbers:
             raise AiOutputValidationError("AI draft introduced unsupported numerical claims")
+        if _PROMPT_CONTROL.search(narrative):
+            raise AiOutputValidationError("AI draft contains prompt-control or secret-seeking text")
         cost = (
             Decimal(input_tokens) * self.policy.input_cost_per_million_usd
             + Decimal(output_tokens) * self.policy.output_cost_per_million_usd

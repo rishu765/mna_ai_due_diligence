@@ -1,6 +1,11 @@
 """Pilot authentication and authorization boundary."""
 
 from .errors import AuthenticationError, AuthorizationError
+from .hardening import (
+    LoginThrottle,
+    PilotHttpSecurityPolicy,
+    http_security_policy_from_environment,
+)
 from .models import (
     AccessSession,
     AuthPrincipal,
@@ -20,9 +25,12 @@ __all__ = [
     "AuthorizationError",
     "DealMembership",
     "DealRole",
+    "LoginThrottle",
     "PasswordManager",
     "Permission",
+    "PilotHttpSecurityPolicy",
     "PilotUser",
     "SessionRecord",
     "UserStatus",
+    "http_security_policy_from_environment",
 ]
