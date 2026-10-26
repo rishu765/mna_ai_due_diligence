@@ -59,6 +59,7 @@ class ArtifactKind(StrEnum):
     REVIEW_ACTION = "review_action"
     REPORT = "report"
     WORKFLOW_SNAPSHOT = "workflow_snapshot"
+    AI_DRAFT = "ai_draft"
 
 
 class PilotReviewEventType(StrEnum):

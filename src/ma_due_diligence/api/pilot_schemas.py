@@ -125,6 +125,7 @@ class PilotReviewDecisionRequest(BaseModel):
     rationale: str = Field(min_length=1, max_length=2_000)
     severity: Severity | None = None
     preferred_source_id: str | None = Field(default=None, max_length=180)
+    ai_draft_id: str | None = Field(default=None, max_length=180)
 
 
 class PilotReviewSubmissionRequest(BaseModel):

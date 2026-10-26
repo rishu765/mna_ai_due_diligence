@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const state = { token: null, user: null, deals: [], deal: null, documents: [], methodology: null, run: null, reviewHistory: null, report: null };
+  const state = { token: null, user: null, deals: [], deal: null, documents: [], methodology: null, aiPolicy: null, run: null, reviewHistory: null, report: null };
   const loginView = document.querySelector("#login-view");
   const application = document.querySelector("#application");
   const pageContent = document.querySelector("#page-content");
@@ -81,6 +81,7 @@
     state.deal = null;
     state.documents = [];
     state.methodology = null;
+    state.aiPolicy = null;
     state.run = null;
     state.reviewHistory = null;
     state.report = null;
@@ -118,6 +119,7 @@
     state.deal = state.deals.find((deal) => deal.deal_id === dealId);
     state.documents = [];
     state.methodology = null;
+    state.aiPolicy = null;
     state.run = null;
     state.reviewHistory = null;
     state.report = null;
@@ -130,6 +132,7 @@
   function renderDeals() {
     state.deal = null;
     state.documents = [];
+    state.aiPolicy = null;
     state.run = null;
     state.reviewHistory = null;
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -365,6 +368,13 @@
         return;
       }
     }
+    if (!state.aiPolicy) {
+      try {
+        state.aiPolicy = await api(`/pilot/deals/${state.deal.deal_id}/ai-policy`);
+      } catch (_) {
+        state.aiPolicy = { enabled: false, human_approval_required: true };
+      }
+    }
     const required = state.run.review_required;
     const findingDecisions = state.run.findings.map((finding) => `
       <article class="review-decision" data-finding-id="${escapeHtml(finding.finding_id)}">
@@ -372,6 +382,11 @@
         <div class="review-fields">
           <label>Decision<select class="review-action" required><option value="">Choose a disposition</option><option value="approve_finding">Approve finding</option><option value="reject_finding">Reject finding</option><option value="change_severity">Change severity</option><option value="mark_nonmaterial">Mark non-material</option><option value="request_more_evidence">Request more evidence</option></select></label>
           <label class="review-severity-field" hidden>Revised severity<select class="review-severity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+        </div>
+        <div class="ai-draft-panel">
+          <button class="button button-secondary ai-draft-request" type="button" ${state.aiPolicy.enabled ? "" : "disabled"}>Draft evidence-bound rationale</button>
+          <span class="ai-draft-status muted">${state.aiPolicy.enabled ? "Optional assistance; no decision is selected or submitted." : "Controlled drafting is disabled."}</span>
+          <div class="ai-draft-output" hidden></div>
         </div>
         <label>Decision rationale<textarea class="review-rationale" rows="2" maxlength="2000" placeholder="State what you reviewed and why this disposition is appropriate." required></textarea></label>
       </article>`).join("");
@@ -385,14 +400,41 @@
         ${required ? `<div class="warning-box">${state.run.review_reasons.length} policy reasons require attention. Every released finding also needs one explicit disposition.</div>` : `<div class="warning-box">Review has been recorded in the immutable decision history.</div>`}
         <div class="review-list">${state.run.review_reasons.map((reason) => `<div class="review-row"><span>${escapeHtml(reason)}</span><span class="status">${required ? "Required" : "Reviewed trigger"}</span></div>`).join("") || '<p class="muted">No review triggers were recorded.</p>'}</div>
       </section>
-      ${required ? `<section class="panel"><h3>Finding dispositions</h3><p class="muted">Review each finding independently. A request for more evidence records the request and prevents report release.</p><div class="review-decision-list">${findingDecisions}${conflictDecisions}</div><label>Overall review comment<textarea id="review-overall-rationale" rows="3" maxlength="2000" placeholder="Summarize the review performed across the complete findings set." required></textarea></label><button id="complete-review" class="button button-primary" type="button">Record decisions and apply review</button></section>` : state.run.report_available ? '<section class="panel"><button class="button button-secondary" data-action="report" type="button">Open reviewed report</button></section>' : '<section class="panel"><div class="warning-box">The run is waiting for requested information. No report has been released.</div></section>'}
+      ${required ? `<section class="panel ai-policy"><div><span class="eyebrow">CONTROLLED AI POLICY</span><h3>${state.aiPolicy.enabled ? `${escapeHtml(state.aiPolicy.provider_id)} · ${escapeHtml(state.aiPolicy.model_id)}` : "Drafting disabled"}</h3><p>${state.aiPolicy.enabled ? `${state.aiPolicy.external_processing ? "Approved external processing" : "No external data transfer"} · retention: ${escapeHtml(state.aiPolicy.retention_policy)} · training use: ${state.aiPolicy.training_use ? "yes" : "no"}` : "Review remains fully manual."}</p></div><div class="ai-policy-controls"><strong>Human approval required</strong><span>Cannot change finance, select a disposition, or submit review</span></div></section><section class="panel"><h3>Finding dispositions</h3><p class="muted">Review each finding independently. A request for more evidence records the request and prevents report release.</p><div class="review-decision-list">${findingDecisions}${conflictDecisions}</div><label>Overall review comment<textarea id="review-overall-rationale" rows="3" maxlength="2000" placeholder="Summarize the review performed across the complete findings set." required></textarea></label><button id="complete-review" class="button button-primary" type="button">Record decisions and apply review</button></section>` : state.run.report_available ? '<section class="panel"><button class="button button-secondary" data-action="report" type="button">Open reviewed report</button></section>' : '<section class="panel"><div class="warning-box">The run is waiting for requested information. No report has been released.</div></section>'}
       <section class="panel"><div class="page-heading"><div><h3>Immutable decision history</h3><p>${state.reviewHistory.event_count} append-only event(s) retained for this run.</p></div></div>${history}</section>`;
     document.querySelectorAll(".review-action").forEach((select) => select.addEventListener("change", () => {
       const severityField = select.closest(".review-decision").querySelector(".review-severity-field");
       severityField.hidden = select.value !== "change_severity";
     }));
+    document.querySelectorAll(".ai-draft-request").forEach((button) => button.addEventListener("click", generateAiDraft));
     document.querySelector("#complete-review")?.addEventListener("click", completeReview);
     bindRouteButtons();
+  }
+
+  async function generateAiDraft(event) {
+    const button = event.currentTarget;
+    const card = button.closest("[data-finding-id]");
+    const output = card.querySelector(".ai-draft-output");
+    const statusText = card.querySelector(".ai-draft-status");
+    button.disabled = true;
+    statusText.textContent = "Creating a bounded draft from this finding's cited evidence…";
+    try {
+      const draft = await api(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/ai-drafts/findings/${card.dataset.findingId}`, { method: "POST" });
+      output.hidden = false;
+      output.innerHTML = `<div class="ai-draft-heading"><strong>Draft awaiting your approval</strong><span>${escapeHtml(draft.provider_id)} · ${draft.external_processing ? "external" : "local"} · $${escapeHtml(draft.estimated_cost_usd)}</span></div><p>${escapeHtml(draft.narrative)}</p><small>Citations: ${escapeHtml(draft.citation_ids.join(", "))} · ${draft.input_tokens} input / ${draft.output_tokens} output tokens</small><button class="button button-secondary ai-use-draft" type="button">Use as editable rationale</button>`;
+      output.querySelector(".ai-use-draft").addEventListener("click", () => {
+        card.querySelector(".review-rationale").value = draft.narrative;
+        card.dataset.aiDraftId = draft.draft_id;
+        statusText.textContent = "Draft applied as editable text. You still choose and submit the decision.";
+      });
+      statusText.textContent = "Inspect the draft and citations before choosing whether to use it.";
+    } catch (failure) {
+      output.hidden = true;
+      statusText.textContent = failure.message;
+      toast(failure.message, true);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function completeReview(event) {
@@ -408,6 +450,7 @@
       }
       const decision = { subject_type: "finding", subject_id: card.dataset.findingId, action, rationale: decisionRationale };
       if (action === "change_severity") decision.severity = card.querySelector(".review-severity").value;
+      if (card.dataset.aiDraftId) decision.ai_draft_id = card.dataset.aiDraftId;
       decisions.push(decision);
     }
     for (const card of document.querySelectorAll("[data-conflict-id]")) {

@@ -34,6 +34,8 @@ The Step 9 per-finding dispositions, conflict resolution, and immutable event re
 in [Pilot Review Actions and Audit History](docs/PILOT_REVIEW_AND_AUDIT.md).
 The Step 10 reviewed PDF, Excel findings register, financial schedules, download controls, and
 export audit fingerprints are documented in [Pilot Report and Excel Exports](docs/PILOT_EXPORTS.md).
+The Step 11 evidence-bound reviewer drafting, provider policy, validation, budget, provenance, and
+human-approval controls are documented in [Pilot Controlled AI](docs/PILOT_CONTROLLED_AI.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
@@ -307,6 +309,12 @@ layers. They contain structured state only and generate no report text in M0.
 Future AI assistance may classify documents, interpret text, propose candidate facts and red flags,
 compare semantic statements, draft grounded explanations, and propose follow-up questions. These
 outputs remain candidates tied to evidence and review status.
+
+The controlled pilot now implements one such candidate path: an optional finding-review rationale
+draft bounded to attached evidence. It validates citations, numerical claims, token/cost limits, and
+provider policy, then requires explicit reviewer use and the ordinary human review submission. The
+default local demonstration provider exercises these controls without claiming a live model call;
+approved external HTTPS providers remain opt-in configuration.
 
 Deterministic Python will own arithmetic, normalization, reconciliation, QoE, working-capital and
 net-debt calculations, thresholds, rule-based checks, and explicit severity/materiality policies.

@@ -97,6 +97,7 @@ class PilotRunService:
         run_id: str,
         actor_id: str,
         submission: HumanReviewSubmission,
+        ai_draft_ids: dict[tuple[str, str], str] | None = None,
     ) -> WorkflowState:
         record = self._database.get_run(deal_id, run_id)
         if record is None:
@@ -114,6 +115,7 @@ class PilotRunService:
             actor_id=actor_id,
             submission=submission,
             actions=state.get("review_actions", ()),
+            ai_draft_ids=ai_draft_ids or {},
         )
         self._database.save_run_with_review_events(
             updated,
@@ -127,6 +129,7 @@ class PilotRunService:
                 object_id=run_id,
                 detail={
                     "decision_count": len(submission.decisions),
+                    "ai_assisted_decision_count": len(ai_draft_ids or {}),
                     "status": state["status"].value,
                 },
                 occurred_at=submission.recorded_at,
@@ -281,6 +284,7 @@ def _review_events(
     actor_id: str,
     submission: HumanReviewSubmission,
     actions: tuple[HumanReviewAction, ...],
+    ai_draft_ids: dict[tuple[str, str], str],
 ) -> tuple[PilotReviewEvent, ...]:
     events = [
         PilotReviewEvent(
@@ -298,6 +302,7 @@ def _review_events(
         )
     ]
     for action in actions:
+        ai_draft_id = ai_draft_ids.get((action.subject_type, action.subject_id))
         events.append(
             PilotReviewEvent(
                 event_id=f"review-event-{uuid4().hex}",
@@ -330,6 +335,8 @@ def _review_events(
                 metadata={
                     "review_action_id": action.action_id,
                     "workflow_action": action.action.value,
+                    "ai_assisted": ai_draft_id is not None,
+                    **({"ai_draft_id": ai_draft_id} if ai_draft_id is not None else {}),
                 },
                 occurred_at=action.occurred_at,
             )

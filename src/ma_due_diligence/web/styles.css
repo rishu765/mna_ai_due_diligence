@@ -124,6 +124,16 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .review-decision-heading > div { display: flex; align-items: center; gap: 10px; }
 .review-decision-heading h3 { margin: 0; }
 .review-decision-heading small { color: var(--ink-soft); text-align: right; }
+.ai-policy { display: flex; align-items: center; justify-content: space-between; gap: 22px; border-left: 4px solid var(--green); }
+.ai-policy h3 { margin: 5px 0; }
+.ai-policy p { margin: 0; color: var(--ink-soft); font-size: 13px; }
+.ai-policy-controls { display: grid; gap: 5px; min-width: 260px; padding: 13px; border-radius: 9px; background: var(--mint); color: var(--ink); font-size: 12px; }
+.ai-draft-panel { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 10px; margin: 12px 0; }
+.ai-draft-status { font-size: 12px; }
+.ai-draft-output { grid-column: 1 / -1; padding: 13px; border: 1px solid #b8d6c8; border-radius: 9px; background: var(--mint); }
+.ai-draft-output p { margin: 9px 0; color: var(--ink); line-height: 1.55; }
+.ai-draft-output small { display: block; margin-bottom: 10px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.ai-draft-heading { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
 .review-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .decision-history { display: grid; gap: 0; }
 .decision-history article { padding: 15px 0; border-bottom: 1px solid var(--line); }
@@ -192,6 +202,10 @@ dialog::backdrop { background: rgba(13,44,42,.45); backdrop-filter: blur(3px); }
   .document-row { align-items: stretch; flex-direction: column; }
   .review-decision-heading { align-items: stretch; flex-direction: column; }
   .review-decision-heading small { text-align: left; }
+  .ai-policy { align-items: stretch; flex-direction: column; }
+  .ai-policy-controls { min-width: 0; }
+  .ai-draft-panel { grid-template-columns: 1fr; }
+  .ai-draft-output { grid-column: 1; }
   .export-panel { align-items: stretch; flex-direction: column; }
   .export-actions { flex-direction: column; }
   .report-validation { grid-template-columns: 1fr 1fr; }

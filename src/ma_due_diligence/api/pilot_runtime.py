@@ -16,6 +16,7 @@ from ma_due_diligence.persistence import (
 )
 from ma_due_diligence.security.service import PilotAuthService
 
+from .pilot_ai import controlled_ai_from_environment
 from .pilot_app import PilotApiContext, create_pilot_app
 from .pilot_documents import PilotDocumentProcessingService, UploadPolicy
 from .pilot_runs import PilotRunService
@@ -50,8 +51,9 @@ class PilotApplicationRuntime:
             checkpoint_key,
         )
         self.runs = PilotRunService(self.database, self.workflow.application)
+        self.ai = controlled_ai_from_environment(self.database)
         self.app: FastAPI = create_pilot_app(
-            PilotApiContext(self.database, self.auth, self.runs, self.documents)
+            PilotApiContext(self.database, self.auth, self.runs, self.documents, self.ai)
         )
         self._bootstrap_administrator()
 

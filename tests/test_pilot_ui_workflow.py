@@ -10,6 +10,11 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from pytest import MonkeyPatch
 
+from ma_due_diligence.api.pilot_ai import (
+    AiProviderPolicy,
+    ControlledAiDraftService,
+    LocalGroundedDraftProvider,
+)
 from ma_due_diligence.api.pilot_app import PilotApiContext, create_pilot_app
 from ma_due_diligence.api.pilot_runs import PilotRunService
 from ma_due_diligence.api.pilot_runtime import PilotApplicationRuntime
@@ -65,7 +70,18 @@ def _setup(tmp_path: Path, role: DealRole) -> tuple[TestClient, str, PilotDataba
         role=role,
     )
     runs = PilotRunService(database, WorkflowApplication(build_workflow()))
-    client = TestClient(create_pilot_app(PilotApiContext(database, auth, runs)))
+    ai = ControlledAiDraftService(
+        database,
+        LocalGroundedDraftProvider(),
+        AiProviderPolicy(
+            provider_id="local-controlled-demo",
+            model_id="grounded-template-v1",
+            external_processing=False,
+            retention_policy="test deal retention policy",
+            training_use=False,
+        ),
+    )
+    client = TestClient(create_pilot_app(PilotApiContext(database, auth, runs, ai=ai)))
     login = client.post(
         "/pilot/auth/login",
         json={"email": member.email, "password": "member password long enough"},
@@ -308,6 +324,130 @@ def test_analyst_can_run_analysis_but_cannot_submit_review(tmp_path: Path) -> No
     )
 
     assert review.status_code == 403
+
+
+def test_controlled_ai_draft_requires_explicit_human_use_and_retains_provenance(
+    tmp_path: Path,
+) -> None:
+    client, token, database = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+    first_finding = paused["findings"][0]
+
+    policy = client.get("/pilot/deals/deal-a/ai-policy", headers=headers)
+    draft = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/ai-drafts/findings/{first_finding['finding_id']}",
+        headers=headers,
+    )
+
+    assert policy.status_code == 200
+    assert policy.json()["human_approval_required"] is True
+    assert policy.json()["may_change_financials"] is False
+    assert draft.status_code == 201
+    draft_payload = draft.json()
+    assert draft_payload["approval_required"] is True
+    assert draft_payload["applied"] is False
+    assert set(draft_payload["citation_ids"]) <= {
+        item["evidence_id"] for item in first_finding["evidence"]
+    }
+    unchanged = client.get(f"/pilot/deals/deal-a/runs/{paused['run_id']}", headers=headers).json()
+    assert unchanged["status"] == "review_required"
+    assert unchanged["review_action_count"] == 0
+
+    decisions = []
+    for index, finding in enumerate(paused["findings"]):
+        decision = {
+            "subject_type": "finding",
+            "subject_id": finding["finding_id"],
+            "action": "approve_finding",
+            "rationale": "Reviewed cited evidence independently.",
+        }
+        if index == 0:
+            decision["rationale"] = draft_payload["narrative"]
+            decision["ai_draft_id"] = draft_payload["draft_id"]
+        decisions.append(decision)
+    decisions.extend(
+        {
+            "subject_type": "conflict",
+            "subject_id": conflict["conflict_id"],
+            "action": "resolve_conflict",
+            "rationale": "Selected the controlling source independently.",
+            "preferred_source_id": conflict["observation_fact_ids"][0],
+        }
+        for conflict in paused["conflicts"]
+        if conflict["conflict_id"] in paused["review_conflict_ids"]
+    )
+    reviewed = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review",
+        headers=headers,
+        json={
+            "rationale": "Completed human review after inspecting the optional draft.",
+            "decisions": decisions,
+        },
+    )
+
+    assert reviewed.status_code == 200
+    history = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review-history",
+        headers=headers,
+    ).json()["events"]
+    assisted = next(
+        item
+        for item in history
+        if item["subject_id"] == first_finding["finding_id"] and item["event_type"] == "approved"
+    )
+    assert assisted["metadata"]["ai_assisted"] is True
+    assert assisted["metadata"]["ai_draft_id"] == draft_payload["draft_id"]
+    artifacts = database.list_artifacts("deal-a", paused["run_id"])
+    assert artifacts[0].payload["approval_status"] == "pending_human_review"
+    audit_actions = [item.action for item in database.list_audit_events("deal-a")]
+    assert "ai_draft_generated" in audit_actions
+    review_audit = next(
+        item for item in database.list_audit_events("deal-a") if item.action == "review_submitted"
+    )
+    assert review_audit.detail["ai_assisted_decision_count"] == 1
+
+
+def test_ai_draft_from_another_finding_cannot_be_attached(tmp_path: Path) -> None:
+    client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+    draft = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/ai-drafts/findings/{paused['findings'][0]['finding_id']}",
+        headers=headers,
+    ).json()
+    decisions = [
+        {
+            "subject_type": "finding",
+            "subject_id": finding["finding_id"],
+            "action": "approve_finding",
+            "rationale": "Reviewed independently.",
+            **({"ai_draft_id": draft["draft_id"]} if index == 1 else {}),
+        }
+        for index, finding in enumerate(paused["findings"])
+    ]
+    decisions.extend(
+        {
+            "subject_type": "conflict",
+            "subject_id": conflict["conflict_id"],
+            "action": "resolve_conflict",
+            "rationale": "Selected controlling source.",
+            "preferred_source_id": conflict["observation_fact_ids"][0],
+        }
+        for conflict in paused["conflicts"]
+        if conflict["conflict_id"] in paused["review_conflict_ids"]
+    )
+
+    response = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review",
+        headers=headers,
+        json={"rationale": "Attempted mismatched draft use.", "decisions": decisions},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "policy_blocked"
+    unchanged = client.get(f"/pilot/deals/deal-a/runs/{paused['run_id']}", headers=headers).json()
+    assert unchanged["status"] == "review_required"
 
 
 def test_released_report_and_workbook_exports_match_application_state(tmp_path: Path) -> None:

@@ -17,8 +17,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 8 | Formalize financial methodologies | Complete |
 | 9 | Connect review actions and audit history | Complete |
 | 10 | Add report and Excel exports | Complete |
-| 11 | Add controlled AI features where valuable | Next |
-| 12–17 | Remaining locked sequence below | Not started |
+| 11 | Add controlled AI features where valuable | Complete |
+| 12 | Expand security and testing | Next |
+| 13–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -118,6 +119,12 @@ event when downloaded.
   provider policy, cost limits, and human approval.
 
 Exit: AI output cannot bypass deterministic finance, evidence requirements, or review.
+
+Implemented through the optional finding-rationale drafting path documented in
+[`PILOT_CONTROLLED_AI.md`](PILOT_CONTROLLED_AI.md). The provider receives only a bounded finding and
+its attached evidence; citations, numerical claims, token usage, request/run cost, policy, and
+provenance are validated before a pending draft is retained. Drafts cannot select decisions or
+submit review, and an immutable decision links the draft only after explicit reviewer use.
 
 ## 12. Expand security and testing
 
