@@ -32,3 +32,59 @@ jobs:
         run: python -m mypy
       - name: Test
         run: python -m pytest --cov=ma_due_diligence --cov-report=term-missing --cov-fail-under=80
+
+  container:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Build pilot image
+        run: docker build --tag madd-pilot:${{ github.sha }} .
+      - name: Start isolated pilot container
+        run: |
+          docker run --detach --name madd-pilot-smoke \
+            --publish 127.0.0.1:18000:8000 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /data:rw,noexec,nosuid,size=256m,uid=999,gid=999 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --pids-limit 256 \
+            --memory 2g \
+            --cpus 2 \
+            --env MADD_DOCUMENT_KEY=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8= \
+            --env MADD_CHECKPOINT_KEY=Hx4dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA= \
+            --env MADD_BOOTSTRAP_ADMIN_EMAIL=pilot@example.com \
+            --env MADD_BOOTSTRAP_ADMIN_PASSWORD=SyntheticPilotPassword!2026 \
+            --env MADD_ALLOWED_HOSTS=127.0.0.1 \
+            --env MADD_ENVIRONMENT=ci \
+            --env MADD_RELEASE_SHA=${{ github.sha }} \
+            --env MADD_AI_MODE=disabled \
+            madd-pilot:${{ github.sha }}
+      - name: Verify container health, release, and non-root user
+        run: |
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:18000/ready > /tmp/ready.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18000/health
+          curl --fail --silent http://127.0.0.1:18000/
+          curl --fail --silent http://127.0.0.1:18000/version | \
+            python -c "import json,sys; p=json.load(sys.stdin); assert p['release']=='${{ github.sha }}'"
+          test "$(docker exec madd-pilot-smoke id -u)" != "0"
+          for attempt in $(seq 1 40); do
+            if test "$(docker inspect --format='{{.State.Health.Status}}' madd-pilot-smoke)" = "healthy"; then
+              break
+            fi
+            sleep 1
+          done
+          test "$(docker inspect --format='{{.State.Health.Status}}' madd-pilot-smoke)" = "healthy"
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs madd-pilot-smoke
+      - name: Stop smoke container
+        if: always()
+        run: docker rm --force madd-pilot-smoke

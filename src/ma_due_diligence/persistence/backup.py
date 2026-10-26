@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -25,6 +26,7 @@ _MAGIC: Final = b"MADD-BACKUP-1\x00"
 _NONCE_BYTES: Final = 12
 _MANIFEST = "manifest.json"
 _DATABASES = ("pilot.sqlite3", "checkpoints.sqlite3")
+_ROTATING_BACKUP = re.compile(r"pilot-\d{8}T\d{12}Z-[0-9a-f]{8}\.madd-backup")
 
 
 class BackupValidationError(ValueError):
@@ -150,6 +152,41 @@ def restore_pilot_backup(
         if temporary.exists():
             shutil.rmtree(temporary)
     return manifest
+
+
+def create_rotating_pilot_backup(
+    data_directory: Path,
+    backup_directory: Path,
+    key: bytes,
+    *,
+    retain: int,
+    now: datetime | None = None,
+) -> tuple[Path, PilotBackupManifest]:
+    """Create, verify, and retain a bounded number of safely named pilot backups."""
+
+    if retain <= 0:
+        raise ValueError("backup retention count must be positive")
+    directory = backup_directory.resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    timestamp = (now or datetime.now(UTC)).astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    destination = directory / f"pilot-{timestamp}-{uuid4().hex[:8]}.madd-backup"
+    manifest = create_pilot_backup(data_directory, destination, key)
+    verify_pilot_backup(destination, key)
+    candidates = sorted(
+        (
+            path
+            for path in directory.iterdir()
+            if path.is_file() and _ROTATING_BACKUP.fullmatch(path.name)
+        ),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for expired in candidates[retain:]:
+        resolved = expired.resolve()
+        if resolved.parent != directory or _ROTATING_BACKUP.fullmatch(resolved.name) is None:
+            raise BackupValidationError("refusing to remove an unsafe backup path")
+        resolved.unlink()
+    return destination, manifest
 
 
 def _snapshot_sqlite(source: Path, destination: Path) -> None:
