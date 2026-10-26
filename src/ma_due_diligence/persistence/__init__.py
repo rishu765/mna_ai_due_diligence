@@ -5,6 +5,7 @@ from .backup import (
     PilotBackupManifest,
     backup_key_from_environment,
     create_pilot_backup,
+    create_rotating_pilot_backup,
     restore_pilot_backup,
     verify_pilot_backup,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "document_key_from_environment",
     "backup_key_from_environment",
     "create_pilot_backup",
+    "create_rotating_pilot_backup",
     "generate_document_key",
     "restore_pilot_backup",
     "verify_pilot_backup",

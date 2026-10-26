@@ -39,6 +39,9 @@ human-approval controls are documented in [Pilot Controlled AI](docs/PILOT_CONTR
 The Step 12 HTTP hardening, login throttling, adversarial testing, encrypted backup/recovery,
 coverage gate, and accepted residual risks are documented in
 [Pilot Security and Test Gate](docs/PILOT_SECURITY_TESTING.md).
+The Step 13 container, HTTPS proxy, persistent-volume, monitoring, backup, rollback, and operator
+foundation is documented in [Pilot Deployment and Operations](docs/PILOT_DEPLOYMENT.md). A live
+host and stable URL are still required before Step 13 can be marked complete.
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,

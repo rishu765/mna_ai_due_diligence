@@ -19,7 +19,7 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 10 | Add report and Excel exports | Complete |
 | 11 | Add controlled AI features where valuable | Complete |
 | 12 | Expand security and testing | Complete |
-| 13 | Deploy the pilot environment | Next |
+| 13 | Deploy the pilot environment | In progress — deployment foundation implemented; live host pending |
 | 14–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
@@ -146,6 +146,13 @@ the local/internal synthetic-data gate and must be reconsidered in Step 13 befor
   operator documentation.
 
 Exit: invited reviewers can reliably access a stable pilot URL.
+
+Repository-owned deployment foundations are implemented in
+[`PILOT_DEPLOYMENT.md`](PILOT_DEPLOYMENT.md): a non-root container, Caddy HTTPS boundary,
+single-instance persistent volumes, isolated network, health/readiness/release checks, encrypted
+backup rotation, CI container smoke testing, monitoring criteria, and rollback/runbook procedures.
+The exit criterion remains open until an approved host/hostname is provisioned and the recorded
+live reviewer and restore acceptance checks pass.
 
 ## 14. Run an internal synthetic-data pilot
 

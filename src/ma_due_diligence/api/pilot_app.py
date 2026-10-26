@@ -1,5 +1,6 @@
 """Authenticated, deal-isolated FastAPI boundary for the controlled pilot."""
 
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -94,6 +95,8 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if request.url.path.startswith("/pilot/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -128,6 +131,13 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
         if not ready:
             raise HTTPException(status_code=503, detail="service is not ready")
         return {"status": "ready", "database": "ok"}
+
+    @app.get("/version")
+    def version() -> dict[str, str]:
+        return {
+            "environment": os.environ.get("MADD_ENVIRONMENT", "local"),
+            "release": os.environ.get("MADD_RELEASE_SHA", "development"),
+        }
 
     @app.get("/", include_in_schema=False)
     def pilot_interface() -> FileResponse:

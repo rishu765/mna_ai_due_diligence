@@ -1,0 +1,13 @@
+{
+    email {$MADD_TLS_EMAIL}
+}
+
+{$MADD_PILOT_HOST} {
+    encode zstd gzip
+    reverse_proxy app:8000
+    header -Server
+    log {
+        output stdout
+        format json
+    }
+}

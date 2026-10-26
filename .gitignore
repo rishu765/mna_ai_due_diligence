@@ -15,6 +15,7 @@
 **/.env
 **/.env.*
 !**/.env.example
+!deploy/.env.pilot.example
 
 # Local/generated project data
 **/data/raw/*
