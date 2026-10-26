@@ -61,6 +61,17 @@ class ArtifactKind(StrEnum):
     WORKFLOW_SNAPSHOT = "workflow_snapshot"
 
 
+class PilotReviewEventType(StrEnum):
+    ASSIGNED = "assigned"
+    COMMENTED = "commented"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EDITED = "edited"
+    SEVERITY_CHANGED = "severity_changed"
+    INFORMATION_REQUESTED = "information_requested"
+    CONFLICT_RESOLVED = "conflict_resolved"
+
+
 @dataclass(frozen=True, slots=True)
 class PilotDealRecord:
     deal_id: str
@@ -173,6 +184,39 @@ class PilotArtifactRecord:
         if self.schema_version < 1:
             raise ValueError("schema_version must be positive")
         _aware(self.created_at, "created_at")
+
+
+@dataclass(frozen=True, slots=True)
+class PilotReviewEvent:
+    event_id: str
+    deal_id: str
+    run_id: str
+    subject_type: str
+    subject_id: str
+    event_type: PilotReviewEventType
+    actor_id: str
+    actor_display_name: str
+    rationale: str
+    prior_state: JsonObject = field(default_factory=dict)
+    resulting_state: JsonObject = field(default_factory=dict)
+    metadata: JsonObject = field(default_factory=dict)
+    occurred_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        for name in (
+            "event_id",
+            "deal_id",
+            "run_id",
+            "subject_type",
+            "subject_id",
+            "actor_id",
+            "actor_display_name",
+            "rationale",
+        ):
+            object.__setattr__(self, name, _required(getattr(self, name), name))
+        if self.subject_type not in {"run", "finding", "conflict"}:
+            raise ValueError("review event subject_type must be run, finding, or conflict")
+        _aware(self.occurred_at, "occurred_at")
 
 
 @dataclass(frozen=True, slots=True)

@@ -138,7 +138,7 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
             "action": "approve_finding",
             "rationale": "Reviewed supporting evidence.",
         }
-        for finding_id in paused["review_finding_ids"]
+        for finding_id in [item["finding_id"] for item in paused["findings"]]
     ]
     for conflict in paused["conflicts"]:
         if conflict["conflict_id"] in paused["review_conflict_ids"]:
@@ -158,6 +158,27 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
     )
     assert reviewed.status_code == 200
     assert reviewed.json()["report_available"] is True
+    assert reviewed.json()["review_action_count"] == len(decisions)
+
+    history = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review-history",
+        headers=headers,
+    )
+    assert history.status_code == 200
+    events = history.json()["events"]
+    assert history.json()["event_count"] == 1 + (2 * len(decisions))
+    assert events[0]["event_type"] == "commented"
+    assert {item["event_type"] for item in events} >= {
+        "assigned",
+        "approved",
+        "conflict_resolved",
+    }
+    decided_finding_ids = {
+        item["subject_id"]
+        for item in events
+        if item["subject_type"] == "finding" and item["event_type"] == "approved"
+    }
+    assert decided_finding_ids == {item["finding_id"] for item in paused["findings"]}
 
     report = client.get(
         f"/pilot/deals/deal-a/runs/{paused['run_id']}/report",
@@ -165,6 +186,99 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
     )
     assert report.status_code == 200
     assert report.json()["report"]["target_name"] == "SecureTech"
+
+
+def test_review_rejects_partial_finding_disposition_without_history(tmp_path: Path) -> None:
+    client, token = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+
+    response = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review",
+        headers=headers,
+        json={
+            "rationale": "Incomplete review should not release a report.",
+            "decisions": [
+                {
+                    "subject_type": "finding",
+                    "subject_id": paused["findings"][0]["finding_id"],
+                    "action": "approve_finding",
+                    "rationale": "Only one finding was reviewed.",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "every released finding" in response.json()["detail"]
+    history = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review-history",
+        headers=headers,
+    )
+    assert history.json() == {"events": [], "event_count": 0}
+
+
+def test_edit_reject_severity_and_information_request_events_are_retained(
+    tmp_path: Path,
+) -> None:
+    client, token = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+    actions = [
+        ("reject_finding", {}),
+        ("change_severity", {"severity": "medium"}),
+        ("mark_nonmaterial", {}),
+        ("request_more_evidence", {}),
+    ]
+    decisions = []
+    for index, finding in enumerate(paused["findings"]):
+        action, extra = actions[index] if index < len(actions) else ("approve_finding", {})
+        decisions.append(
+            {
+                "subject_type": "finding",
+                "subject_id": finding["finding_id"],
+                "action": action,
+                "rationale": f"Reviewer disposition for finding {index + 1}.",
+                **extra,
+            }
+        )
+    for conflict in paused["conflicts"]:
+        if conflict["conflict_id"] in paused["review_conflict_ids"]:
+            decisions.append(
+                {
+                    "subject_type": "conflict",
+                    "subject_id": conflict["conflict_id"],
+                    "action": "resolve_conflict",
+                    "rationale": "Selected the controlling source.",
+                    "preferred_source_id": conflict["observation_fact_ids"][0],
+                }
+            )
+
+    reviewed = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review",
+        headers=headers,
+        json={"rationale": "Completed independent dispositions.", "decisions": decisions},
+    )
+
+    assert reviewed.status_code == 200
+    assert reviewed.json()["status"] == "waiting_for_information"
+    assert reviewed.json()["report_available"] is False
+    assert reviewed.json()["findings"][0]["status"] == "closed"
+    assert reviewed.json()["findings"][1]["severity"] == "medium"
+    history = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review-history",
+        headers=headers,
+    ).json()
+    event_types = {item["event_type"] for item in history["events"]}
+    assert event_types >= {
+        "assigned",
+        "commented",
+        "rejected",
+        "severity_changed",
+        "edited",
+        "information_requested",
+        "conflict_resolved",
+    }
 
 
 def test_analyst_can_run_analysis_but_cannot_submit_review(tmp_path: Path) -> None:

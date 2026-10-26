@@ -30,6 +30,8 @@ The Step 7 validation, scanning, OCR/table, chunk-persistence, and batch-status 
 documented in [Pilot Document Processing](docs/PILOT_DOCUMENT_PROCESSING.md).
 The Step 8 versioned policies, source hierarchy, assumptions, thresholds, and calculation traces are
 documented in [Pilot Financial Methodology](docs/PILOT_FINANCIAL_METHODOLOGY.md).
+The Step 9 per-finding dispositions, conflict resolution, and immutable event register are documented
+in [Pilot Review Actions and Audit History](docs/PILOT_REVIEW_AND_AUDIT.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,

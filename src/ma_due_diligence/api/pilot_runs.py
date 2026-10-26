@@ -9,13 +9,21 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
+from ma_due_diligence.domain import HumanReviewAction, ReviewActionType
 from ma_due_diligence.financial.methodology import default_financial_methodology
 from ma_due_diligence.financial.models import CalculationLine
-from ma_due_diligence.persistence import PilotDatabase, PilotRunRecord
+from ma_due_diligence.persistence import (
+    PilotAuditEvent,
+    PilotDatabase,
+    PilotReviewEvent,
+    PilotReviewEventType,
+    PilotRunRecord,
+)
 from ma_due_diligence.specialists.fixtures import (
     build_specialist_engagement,
     create_specialist_fixture_vdr,
 )
+from ma_due_diligence.specialists.models import AttributedFinding
 from ma_due_diligence.workflow_final import (
     HumanReviewSubmission,
     WorkflowApplication,
@@ -87,21 +95,49 @@ class PilotRunService:
         *,
         deal_id: str,
         run_id: str,
+        actor_id: str,
         submission: HumanReviewSubmission,
     ) -> WorkflowState:
         record = self._database.get_run(deal_id, run_id)
         if record is None:
             raise KeyError(f"run not found: {run_id}")
         state = self._application.resume(thread_id=run_id, submission=submission)
-        self._database.save_run(
-            replace(
-                record,
-                status=state["status"].value,
-                state=_state_summary(state),
-                updated_at=datetime.now(UTC),
-            )
+        updated = replace(
+            record,
+            status=state["status"].value,
+            state=_state_summary(state),
+            updated_at=datetime.now(UTC),
+        )
+        events = _review_events(
+            deal_id=deal_id,
+            run_id=run_id,
+            actor_id=actor_id,
+            submission=submission,
+            actions=state.get("review_actions", ()),
+        )
+        self._database.save_run_with_review_events(
+            updated,
+            events,
+            PilotAuditEvent(
+                event_id=f"audit-{uuid4().hex}",
+                deal_id=deal_id,
+                actor_id=actor_id,
+                action="review_submitted",
+                object_type="run",
+                object_id=run_id,
+                detail={
+                    "decision_count": len(submission.decisions),
+                    "status": state["status"].value,
+                },
+                occurred_at=submission.recorded_at,
+            ),
         )
         return state
+
+    def review_history(self, *, deal_id: str, run_id: str) -> tuple[PilotReviewEvent, ...]:
+        if self._database.get_run(deal_id, run_id) is None:
+            raise KeyError(f"run not found: {run_id}")
+        return self._database.list_review_events(deal_id, run_id)
 
     def close(self) -> None:
         for directory in self._fixture_directories.values():
@@ -111,8 +147,13 @@ class PilotRunService:
 
 def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
     coordinator = state.get("specialist_result")
+    attributed_findings: tuple[AttributedFinding, ...] = tuple(
+        item.finding for item in state.get("final_findings", ())
+    )
+    if not attributed_findings and coordinator is not None:
+        attributed_findings = coordinator.findings
     findings = []
-    if coordinator is not None:
+    if attributed_findings:
         findings = [
             {
                 "finding_id": item.finding.finding_id,
@@ -120,6 +161,8 @@ def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
                 "description": item.finding.description,
                 "severity": item.finding.severity.value,
                 "workstream": item.finding.workstream.value,
+                "status": item.finding.status.value,
+                "analyst_review_status": item.finding.analyst_review_status.value,
                 "support_status": item.finding.support_status.value,
                 "deal_impact": item.finding.potential_deal_impact,
                 "evidence": [
@@ -133,7 +176,7 @@ def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
                     for evidence in item.finding.evidence
                 ],
             }
-            for item in coordinator.findings
+            for item in attributed_findings
         ]
     conflicts = [
         {
@@ -177,6 +220,29 @@ def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
         "errors": [item.message for item in state.get("errors", ())],
         "financial": financial_payload,
         "report_available": state.get("report") is not None,
+        "review_action_count": len(state.get("review_actions", ())),
+    }
+
+
+def review_history_payload(events: tuple[PilotReviewEvent, ...]) -> dict[str, object]:
+    return {
+        "events": [
+            {
+                "event_id": event.event_id,
+                "subject_type": event.subject_type,
+                "subject_id": event.subject_id,
+                "event_type": event.event_type.value,
+                "actor_id": event.actor_id,
+                "actor_display_name": event.actor_display_name,
+                "rationale": event.rationale,
+                "prior_state": event.prior_state,
+                "resulting_state": event.resulting_state,
+                "metadata": event.metadata,
+                "occurred_at": event.occurred_at.isoformat(),
+            }
+            for event in events
+        ],
+        "event_count": len(events),
     }
 
 
@@ -196,6 +262,79 @@ def _state_summary(state: WorkflowState) -> dict[str, object]:
 
 def _decimal_string(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+_REVIEW_EVENT_TYPE = {
+    ReviewActionType.APPROVE_FINDING: PilotReviewEventType.APPROVED,
+    ReviewActionType.REJECT_FINDING: PilotReviewEventType.REJECTED,
+    ReviewActionType.CHANGE_SEVERITY: PilotReviewEventType.SEVERITY_CHANGED,
+    ReviewActionType.MARK_NONMATERIAL: PilotReviewEventType.EDITED,
+    ReviewActionType.REQUEST_MORE_EVIDENCE: PilotReviewEventType.INFORMATION_REQUESTED,
+    ReviewActionType.RESOLVE_CONFLICT: PilotReviewEventType.CONFLICT_RESOLVED,
+}
+
+
+def _review_events(
+    *,
+    deal_id: str,
+    run_id: str,
+    actor_id: str,
+    submission: HumanReviewSubmission,
+    actions: tuple[HumanReviewAction, ...],
+) -> tuple[PilotReviewEvent, ...]:
+    events = [
+        PilotReviewEvent(
+            event_id=f"review-event-{uuid4().hex}",
+            deal_id=deal_id,
+            run_id=run_id,
+            subject_type="run",
+            subject_id=run_id,
+            event_type=PilotReviewEventType.COMMENTED,
+            actor_id=actor_id,
+            actor_display_name=submission.reviewer,
+            rationale=submission.rationale,
+            metadata={"decision_count": len(actions)},
+            occurred_at=submission.recorded_at,
+        )
+    ]
+    for action in actions:
+        events.append(
+            PilotReviewEvent(
+                event_id=f"review-event-{uuid4().hex}",
+                deal_id=deal_id,
+                run_id=run_id,
+                subject_type=action.subject_type,
+                subject_id=action.subject_id,
+                event_type=PilotReviewEventType.ASSIGNED,
+                actor_id=actor_id,
+                actor_display_name=submission.reviewer,
+                rationale=f"Assigned to {submission.reviewer} for decision.",
+                resulting_state={"assignee_id": actor_id, "assignee": submission.reviewer},
+                metadata={"review_action_id": action.action_id},
+                occurred_at=action.occurred_at,
+            )
+        )
+        events.append(
+            PilotReviewEvent(
+                event_id=f"review-event-{uuid4().hex}",
+                deal_id=deal_id,
+                run_id=run_id,
+                subject_type=action.subject_type,
+                subject_id=action.subject_id,
+                event_type=_REVIEW_EVENT_TYPE[action.action],
+                actor_id=actor_id,
+                actor_display_name=submission.reviewer,
+                rationale=action.rationale,
+                prior_state={item.name: item.value for item in action.prior_state},
+                resulting_state={item.name: item.value for item in action.resulting_state},
+                metadata={
+                    "review_action_id": action.action_id,
+                    "workflow_action": action.action.value,
+                },
+                occurred_at=action.occurred_at,
+            )
+        )
+    return tuple(events)
 
 
 def _financial_calculation_trace(

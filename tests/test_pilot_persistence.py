@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -19,6 +20,8 @@ from ma_due_diligence.persistence import (
     PilotDatabase,
     PilotDealRecord,
     PilotDocumentService,
+    PilotReviewEvent,
+    PilotReviewEventType,
     PilotRunRecord,
     StoredDocumentRecord,
     StoredDocumentStatus,
@@ -196,7 +199,7 @@ def test_database_persists_deal_document_run_artifact_and_audit(tmp_path: Path) 
     database.append_audit_event(audit)
 
     reopened = PilotDatabase(database_path)
-    assert reopened.schema_version() == 3
+    assert reopened.schema_version() == 4
     assert reopened.get_deal(deal.deal_id) == deal
     assert reopened.get_document(deal.deal_id, document.document_id) == document
     assert reopened.get_run(deal.deal_id, run.run_id) == run
@@ -270,6 +273,66 @@ def test_database_updates_run_state_without_losing_creation_time(tmp_path: Path)
     assert loaded == updated
     assert loaded is not None
     assert loaded.created_at == original.created_at
+
+
+def test_review_history_is_append_only_ordered_and_deal_scoped(tmp_path: Path) -> None:
+    database = PilotDatabase(tmp_path / "pilot.sqlite3")
+    database.initialize()
+    deal = _deal()
+    database.create_deal(deal)
+    run = PilotRunRecord(
+        run_id="run-review",
+        deal_id=deal.deal_id,
+        status="review_required",
+        review_policy="when_needed",
+        created_at=deal.created_at,
+        updated_at=deal.updated_at,
+    )
+    database.save_run(run)
+    event = PilotReviewEvent(
+        event_id="review-event-1",
+        deal_id=deal.deal_id,
+        run_id=run.run_id,
+        subject_type="finding",
+        subject_id="finding-1",
+        event_type=PilotReviewEventType.SEVERITY_CHANGED,
+        actor_id="reviewer-1",
+        actor_display_name="Deal Reviewer",
+        rationale="Evidence supports a lower severity.",
+        prior_state={"severity": "high"},
+        resulting_state={"severity": "medium"},
+        occurred_at=deal.updated_at,
+    )
+
+    database.append_review_events((event,))
+
+    reopened = PilotDatabase(database.path)
+    assert reopened.list_review_events(deal.deal_id, run.run_id) == (event,)
+    assert reopened.list_review_events(
+        deal.deal_id,
+        run.run_id,
+        subject_type="finding",
+        subject_id="finding-1",
+    ) == (event,)
+    assert reopened.list_review_events("another-deal", run.run_id) == ()
+    with pytest.raises(PersistenceConflictError):
+        database.append_review_events((event,))
+    with (
+        sqlite3.connect(database.path) as connection,
+        pytest.raises(sqlite3.DatabaseError, match="review events are immutable"),
+    ):
+        connection.execute(
+            "UPDATE pilot_review_events SET rationale = ? WHERE event_id = ?",
+            ("tampered", event.event_id),
+        )
+    with (
+        sqlite3.connect(database.path) as connection,
+        pytest.raises(sqlite3.DatabaseError, match="review events are immutable"),
+    ):
+        connection.execute(
+            "DELETE FROM pilot_review_events WHERE event_id = ?",
+            (event.event_id,),
+        )
 
 
 def test_document_service_atomically_registers_blob_metadata_and_audit(tmp_path: Path) -> None:

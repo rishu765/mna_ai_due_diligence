@@ -25,12 +25,14 @@ from .models import (
     PilotArtifactRecord,
     PilotAuditEvent,
     PilotDealRecord,
+    PilotReviewEvent,
+    PilotReviewEventType,
     PilotRunRecord,
     StoredDocumentRecord,
     StoredDocumentStatus,
 )
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS pilot_schema_migrations (
@@ -181,6 +183,44 @@ CREATE INDEX IF NOT EXISTS idx_pilot_chunks_deal_document
 ON pilot_document_chunks(deal_id, document_id, chunk_index);
 """
 
+_SCHEMA_V4 = """
+CREATE TABLE IF NOT EXISTS pilot_review_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    deal_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    subject_type TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    actor_display_name TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    prior_state_json TEXT NOT NULL,
+    resulting_state_json TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    FOREIGN KEY (deal_id, run_id) REFERENCES pilot_runs(deal_id, run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pilot_review_events_run_sequence
+ON pilot_review_events(deal_id, run_id, sequence);
+
+CREATE INDEX IF NOT EXISTS idx_pilot_review_events_subject
+ON pilot_review_events(deal_id, run_id, subject_type, subject_id, sequence);
+
+CREATE TRIGGER IF NOT EXISTS pilot_review_events_no_update
+BEFORE UPDATE ON pilot_review_events
+BEGIN
+    SELECT RAISE(ABORT, 'review events are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS pilot_review_events_no_delete
+BEFORE DELETE ON pilot_review_events
+BEGIN
+    SELECT RAISE(ABORT, 'review events are immutable');
+END;
+"""
+
 
 class PersistenceConflictError(RuntimeError):
     """Raised when an identifier already belongs to another persisted object."""
@@ -212,6 +252,12 @@ class PilotDatabase:
                 (2,),
             )
             connection.executescript(_SCHEMA_V3)
+            connection.execute(
+                "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
+                "VALUES (?, datetime('now'))",
+                (3,),
+            )
+            connection.executescript(_SCHEMA_V4)
             connection.execute(
                 "INSERT OR IGNORE INTO pilot_schema_migrations(version, applied_at) "
                 "VALUES (?, datetime('now'))",
@@ -675,42 +721,7 @@ class PilotDatabase:
     def save_run(self, record: PilotRunRecord) -> None:
         try:
             with self._connection() as connection:
-                existing = connection.execute(
-                    "SELECT deal_id, created_at FROM pilot_runs WHERE run_id = ?",
-                    (record.run_id,),
-                ).fetchone()
-                if existing is not None and str(existing["deal_id"]) != record.deal_id:
-                    raise PersistenceConflictError(
-                        f"run_id {record.run_id} belongs to another deal"
-                    )
-                created_at = (
-                    record.created_at.isoformat()
-                    if existing is None
-                    else str(existing["created_at"])
-                )
-                connection.execute(
-                    """
-                    INSERT INTO pilot_runs (
-                        run_id, deal_id, status, review_policy, state_json,
-                        created_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(run_id) DO UPDATE SET
-                        status = excluded.status,
-                        review_policy = excluded.review_policy,
-                        state_json = excluded.state_json,
-                        updated_at = excluded.updated_at
-                    """,
-                    (
-                        record.run_id,
-                        record.deal_id,
-                        record.status,
-                        record.review_policy,
-                        _json_dumps(record.state),
-                        record.created_by,
-                        created_at,
-                        record.updated_at.isoformat(),
-                    ),
-                )
+                _save_run(connection, record)
         except sqlite3.IntegrityError as error:
             raise PersistenceConflictError(
                 f"run cannot be stored for deal {record.deal_id}: {record.run_id}"
@@ -773,27 +784,64 @@ class PilotDatabase:
             rows = connection.execute(sql, parameters).fetchall()
         return tuple(_artifact_from_row(row) for row in rows)
 
+    def append_review_events(self, events: tuple[PilotReviewEvent, ...]) -> None:
+        if not events:
+            return
+        try:
+            with self._connection() as connection:
+                _append_review_events(connection, events)
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError("review events could not be appended") from error
+
+    def save_run_with_review_events(
+        self,
+        record: PilotRunRecord,
+        events: tuple[PilotReviewEvent, ...],
+        audit_event: PilotAuditEvent,
+    ) -> None:
+        if any(
+            event.deal_id != record.deal_id or event.run_id != record.run_id for event in events
+        ):
+            raise ValueError("review events must belong to the saved run")
+        if audit_event.deal_id != record.deal_id or audit_event.object_id != record.run_id:
+            raise ValueError("review audit event must belong to the saved run")
+        try:
+            with self._connection() as connection:
+                _save_run(connection, record)
+                _append_review_events(connection, events)
+                _append_audit_event(connection, audit_event)
+        except sqlite3.IntegrityError as error:
+            raise PersistenceConflictError(
+                f"review result cannot be stored for run {record.run_id}"
+            ) from error
+
+    def list_review_events(
+        self,
+        deal_id: str,
+        run_id: str,
+        *,
+        subject_type: str | None = None,
+        subject_id: str | None = None,
+    ) -> tuple[PilotReviewEvent, ...]:
+        filters = ["deal_id = ?", "run_id = ?"]
+        parameters: list[str] = [deal_id, run_id]
+        if subject_type is not None:
+            filters.append("subject_type = ?")
+            parameters.append(subject_type)
+        if subject_id is not None:
+            filters.append("subject_id = ?")
+            parameters.append(subject_id)
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM pilot_review_events WHERE {' AND '.join(filters)} ORDER BY sequence",
+                tuple(parameters),
+            ).fetchall()
+        return tuple(_review_event_from_row(row) for row in rows)
+
     def append_audit_event(self, event: PilotAuditEvent) -> None:
         try:
             with self._connection() as connection:
-                connection.execute(
-                    """
-                    INSERT INTO pilot_audit_events (
-                        event_id, deal_id, actor_id, action, object_type,
-                        object_id, detail_json, occurred_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event.event_id,
-                        event.deal_id,
-                        event.actor_id,
-                        event.action,
-                        event.object_type,
-                        event.object_id,
-                        _json_dumps(event.detail),
-                        event.occurred_at.isoformat(),
-                    ),
-                )
+                _append_audit_event(connection, event)
         except sqlite3.IntegrityError as error:
             raise PersistenceConflictError(
                 f"audit event cannot be stored for deal {event.deal_id}: {event.event_id}"
@@ -827,6 +875,92 @@ class PilotDatabase:
 
 def _json_dumps(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _save_run(connection: sqlite3.Connection, record: PilotRunRecord) -> None:
+    existing = connection.execute(
+        "SELECT deal_id, created_at FROM pilot_runs WHERE run_id = ?",
+        (record.run_id,),
+    ).fetchone()
+    if existing is not None and str(existing["deal_id"]) != record.deal_id:
+        raise PersistenceConflictError(f"run_id {record.run_id} belongs to another deal")
+    created_at = record.created_at.isoformat() if existing is None else str(existing["created_at"])
+    connection.execute(
+        """
+        INSERT INTO pilot_runs (
+            run_id, deal_id, status, review_policy, state_json,
+            created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET
+            status = excluded.status,
+            review_policy = excluded.review_policy,
+            state_json = excluded.state_json,
+            updated_at = excluded.updated_at
+        """,
+        (
+            record.run_id,
+            record.deal_id,
+            record.status,
+            record.review_policy,
+            _json_dumps(record.state),
+            record.created_by,
+            created_at,
+            record.updated_at.isoformat(),
+        ),
+    )
+
+
+def _append_review_events(
+    connection: sqlite3.Connection,
+    events: tuple[PilotReviewEvent, ...],
+) -> None:
+    for event in events:
+        connection.execute(
+            """
+            INSERT INTO pilot_review_events (
+                event_id, deal_id, run_id, subject_type, subject_id,
+                event_type, actor_id, actor_display_name, rationale,
+                prior_state_json, resulting_state_json, metadata_json,
+                occurred_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_id,
+                event.deal_id,
+                event.run_id,
+                event.subject_type,
+                event.subject_id,
+                event.event_type.value,
+                event.actor_id,
+                event.actor_display_name,
+                event.rationale,
+                _json_dumps(event.prior_state),
+                _json_dumps(event.resulting_state),
+                _json_dumps(event.metadata),
+                event.occurred_at.isoformat(),
+            ),
+        )
+
+
+def _append_audit_event(connection: sqlite3.Connection, event: PilotAuditEvent) -> None:
+    connection.execute(
+        """
+        INSERT INTO pilot_audit_events (
+            event_id, deal_id, actor_id, action, object_type,
+            object_id, detail_json, occurred_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            event.event_id,
+            event.deal_id,
+            event.actor_id,
+            event.action,
+            event.object_type,
+            event.object_id,
+            _json_dumps(event.detail),
+            event.occurred_at.isoformat(),
+        ),
+    )
 
 
 def _json_object(payload: str) -> JsonObject:
@@ -904,6 +1038,24 @@ def _artifact_from_row(row: sqlite3.Row) -> PilotArtifactRecord:
         payload=_json_object(str(row["payload_json"])),
         schema_version=int(row["schema_version"]),
         created_at=datetime.fromisoformat(str(row["created_at"])),
+    )
+
+
+def _review_event_from_row(row: sqlite3.Row) -> PilotReviewEvent:
+    return PilotReviewEvent(
+        event_id=str(row["event_id"]),
+        deal_id=str(row["deal_id"]),
+        run_id=str(row["run_id"]),
+        subject_type=str(row["subject_type"]),
+        subject_id=str(row["subject_id"]),
+        event_type=PilotReviewEventType(str(row["event_type"])),
+        actor_id=str(row["actor_id"]),
+        actor_display_name=str(row["actor_display_name"]),
+        rationale=str(row["rationale"]),
+        prior_state=_json_object(str(row["prior_state_json"])),
+        resulting_state=_json_object(str(row["resulting_state_json"])),
+        metadata=_json_object(str(row["metadata_json"])),
+        occurred_at=datetime.fromisoformat(str(row["occurred_at"])),
     )
 
 
