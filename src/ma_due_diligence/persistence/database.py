@@ -271,6 +271,13 @@ class PilotDatabase:
             ).fetchone()
         return int(row["version"])
 
+    def integrity_check(self) -> bool:
+        """Return whether SQLite reports a structurally valid pilot database."""
+
+        with self._connection() as connection:
+            row = connection.execute("PRAGMA quick_check").fetchone()
+        return row is not None and str(row[0]) == "ok"
+
     def create_deal(self, record: PilotDealRecord) -> None:
         try:
             with self._connection() as connection:

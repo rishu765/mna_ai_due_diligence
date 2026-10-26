@@ -95,16 +95,20 @@ The original V1 fixture API remains unchanged. The pilot UI will consume this ne
 boundary and later endpoints will apply the same permission model to documents, runs, findings,
 review actions, evidence, and reports.
 
-## Known limitations and next security work
+## Step 12 hardening and remaining limitations
 
 - No email invitation or password-reset delivery workflow yet
 - No multi-factor authentication or enterprise SSO yet
-- No persistent login throttling, IP policy, or anomaly detection yet
-- No secure-cookie browser integration until the UI exists
-- No CSRF design until the browser session mechanism is selected
-- No automatic administrator bootstrap command yet
+- Login throttling is process-local; there is no enterprise IP policy or anomaly detection yet
+- The browser keeps the bearer session in tab memory; secure-cookie and CSRF design remain a
+  deployment decision
 - No external penetration test or independent security review yet
 - The pilot remains single-company rather than a general multi-tenant SaaS platform
+
+Step 12 adds host allowlisting, response security headers, bounded login throttling, readiness
+checking, adversarial AI validation, encrypted backup/recovery, performance smoke coverage, and a
+repository coverage gate. See [Pilot Security and Test Gate](PILOT_SECURITY_TESTING.md) for the
+complete control matrix and explicit residual-risk decision.
 
 ## Verification
 

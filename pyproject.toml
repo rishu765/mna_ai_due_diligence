@@ -31,6 +31,7 @@ madd-agent-demo = "ma_due_diligence.demo_final:main"
 madd-evaluate = "ma_due_diligence.evaluation_final:main"
 madd-api = "ma_due_diligence.api_cli:main"
 madd-pilot-api = "ma_due_diligence.pilot_api_cli:main"
+madd-pilot-backup = "ma_due_diligence.pilot_backup_cli:main"
 
 [project.optional-dependencies]
 dev = [
