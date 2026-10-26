@@ -11,6 +11,7 @@ from ma_due_diligence.domain import (
     DealImpactArea,
     DiligenceFinding,
     DiligenceWorkstream,
+    DocumentType,
     EvidenceReference,
     FindingType,
     FollowUpQuestion,
@@ -117,7 +118,11 @@ class CommercialDiligenceAnalyzer:
                     percentage=concentration.numeric_value,
                 )
             )
-        expiry = _earliest_claim(context.claims, "contract_expiry")
+        expiry = _earliest_claim(
+            context.claims,
+            "contract_expiry",
+            document_types=(DocumentType.CUSTOMER_CONTRACT,),
+        )
         if expiry is not None and expiry.date_value is not None:
             horizon = context.engagement.as_of_date + timedelta(days=730)
             if expiry.date_value <= horizon:
@@ -472,9 +477,17 @@ def _highest_claim(claims: tuple[InvestigationClaim, ...], topic: str) -> Invest
 
 
 def _earliest_claim(
-    claims: tuple[InvestigationClaim, ...], topic: str
+    claims: tuple[InvestigationClaim, ...],
+    topic: str,
+    *,
+    document_types: tuple[DocumentType, ...] | None = None,
 ) -> InvestigationClaim | None:
-    values = tuple(claim for claim in _active_claims(claims, topic) if claim.date_value is not None)
+    values = tuple(
+        claim
+        for claim in _active_claims(claims, topic)
+        if claim.date_value is not None
+        and (document_types is None or claim.document_type in document_types)
+    )
     return min(values, key=lambda item: item.date_value or date.max, default=None)
 
 

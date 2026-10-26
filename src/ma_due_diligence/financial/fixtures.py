@@ -108,15 +108,57 @@ def build_financial_fixture_case() -> FinancialFixtureCase:
     fy2023 = FinancialPeriod(PeriodKind.FISCAL_YEAR, "FY2023", date(2023, 1, 1), date(2023, 12, 31))
     fy2024 = FinancialPeriod(PeriodKind.FISCAL_YEAR, "FY2024", date(2024, 1, 1), date(2024, 12, 31))
     fy2025 = FinancialPeriod(PeriodKind.FISCAL_YEAR, "FY2025", date(2025, 1, 1), date(2025, 12, 31))
-    audited = _evidence("ev-audited", "doc-audited", fy2025, "Audited financial statements")
-    management = _evidence("ev-management", "doc-management", fy2025, "Management accounts")
-    deck = _evidence("ev-deck", "doc-deck", fy2025, "Management presentation")
-    sales = _evidence("ev-sales", "doc-sales", fy2025, "Sales by customer")
-    bridge = _evidence("ev-bridge", "doc-bridge", fy2025, "Management EBITDA bridge")
-    wc_evidence = _evidence("ev-wc", "doc-wc", fy2025, "Working capital history")
-    debt_evidence = _evidence("ev-debt", "doc-debt", fy2025, "Debt schedule")
-    cash_evidence = _evidence("ev-cash", "doc-cash", fy2025, "Bank cash schedule")
-    debt_like_evidence = _evidence("ev-debt-like", "doc-debt-like", fy2025, "Debt-like schedule")
+    audited = _evidence(
+        "ev-audited",
+        "doc-audited",
+        fy2025,
+        "Audited FY2025: Revenue GBP 92.0m; Gross Profit GBP 33.12m; EBITDA GBP 14.0m.",
+    )
+    management = _evidence(
+        "ev-management",
+        "doc-management",
+        fy2025,
+        "FY2025 management accounts: Revenue GBP 95.0m; EBITDA GBP 14.0m.",
+    )
+    deck = _evidence(
+        "ev-deck",
+        "doc-deck",
+        fy2025,
+        "FY2025 management presentation: Revenue GBP 100.0m.",
+    )
+    sales = _evidence(
+        "ev-sales",
+        "doc-sales",
+        fy2025,
+        "FY2025 sales report: Revenue GBP 95.0m; Apex GBP 39.9m (42% of identified revenue).",
+    )
+    bridge = _evidence(
+        "ev-bridge",
+        "doc-bridge",
+        fy2025,
+        "Management EBITDA bridge: recurring legal fees GBP 2.0m in FY2024 and FY2025; ERP costs GBP 1.0m in FY2025.",
+    )
+    wc_evidence = _evidence(
+        "ev-wc",
+        "doc-wc",
+        fy2025,
+        "FY2025 monthly working-capital history; September inventory is missing and December NWC is GBP 12.5m.",
+    )
+    debt_evidence = _evidence(
+        "ev-debt", "doc-debt", fy2025, "FY2025 debt schedule: reported bank debt GBP 25.0m."
+    )
+    cash_evidence = _evidence(
+        "ev-cash",
+        "doc-cash",
+        fy2025,
+        "FY2025 bank schedule: unrestricted cash GBP 6.0m; restricted reserve GBP 2.0m; liquid deposit GBP 0.5m.",
+    )
+    debt_like_evidence = _evidence(
+        "ev-debt-like",
+        "doc-debt-like",
+        fy2025,
+        "FY2025 debt-like schedule: accrued transaction fees GBP 1.5m.",
+    )
     observations = (
         _observation(
             "rev-23",

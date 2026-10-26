@@ -88,7 +88,11 @@ def _policy(**changes: object) -> AiProviderPolicy:
 def test_local_controlled_draft_is_grounded_persisted_and_not_applied(tmp_path: Path) -> None:
     state, database = _state_and_database(tmp_path)
     service = ControlledAiDraftService(database, LocalGroundedDraftProvider(), _policy())
-    finding = state["specialist_result"].findings[0].finding
+    finding = next(
+        item.finding
+        for item in state["specialist_result"].findings
+        if item.finding.title == "Material revenue discrepancy"
+    )
 
     draft = service.create_finding_draft(
         deal_id="deal-a",
@@ -98,7 +102,8 @@ def test_local_controlled_draft_is_grounded_persisted_and_not_applied(tmp_path: 
         state=state,
     )
 
-    assert set(draft.citation_ids) <= {item.evidence_id for item in finding.evidence}
+    assert set(draft.citation_ids) == {item.evidence_id for item in finding.evidence}
+    assert all(value in draft.narrative for value in ("92.0", "95.0", "100.0"))
     assert draft.estimated_cost_usd == Decimal("0.000000")
     payload = draft.payload(service.policy)
     assert payload["approval_required"] is True

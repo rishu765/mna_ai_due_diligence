@@ -599,7 +599,20 @@
 
   function findingList(findings) {
     if (!findings.length) return '<div class="panel"><p class="muted">No findings returned.</p></div>';
-    return `<div class="finding-list">${findings.map((item) => `<details class="finding" data-severity="${escapeHtml(item.severity)}"><summary><span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(pretty(item.workstream))} · ${escapeHtml(pretty(item.support_status))} · ${escapeHtml(pretty(item.status))} · ${escapeHtml(pretty(item.analyst_review_status))}</p></span><span>＋</span></summary><div class="evidence"><p>${escapeHtml(item.description)}</p>${item.evidence.map((evidence) => `<blockquote><strong>${escapeHtml(evidence.document_id || "Source")}</strong>${evidence.pages.length ? ` · page ${evidence.pages.join(", ")}` : ""}<br>${escapeHtml(evidence.source_text || "Evidence reference retained in the workflow.")}</blockquote>`).join("")}</div></details>`).join("")}</div>`;
+    return `<div class="finding-list">${findings.map((item) => `<details class="finding" data-severity="${escapeHtml(item.severity)}"><summary><span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span><span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(pretty(item.workstream))} · ${escapeHtml(pretty(item.support_status))} · ${escapeHtml(pretty(item.status))} · ${escapeHtml(pretty(item.analyst_review_status))}</p></span><span>＋</span></summary><div class="evidence"><p>${escapeHtml(item.description)}</p>${item.evidence.map((evidence) => `<blockquote><strong>${escapeHtml(evidence.document_id || "Source")}</strong> · Evidence ID ${escapeHtml(evidence.evidence_id)} · ${escapeHtml(evidenceLocator(evidence))}<br>${escapeHtml(evidence.source_text || "Evidence reference retained in the workflow.")}</blockquote>`).join("")}</div></details>`).join("")}</div>`;
+  }
+
+  function evidenceLocator(evidence) {
+    const parts = [];
+    if (evidence.pages?.length) parts.push(`page ${evidence.pages.join(", ")}`);
+    if (evidence.section) parts.push(`section ${evidence.section}`);
+    if (evidence.table) parts.push(`table ${evidence.table}`);
+    if (evidence.row) parts.push(`row ${evidence.row}`);
+    if (evidence.column) parts.push(`column ${evidence.column}`);
+    if (evidence.sheet_name) parts.push(`sheet ${evidence.sheet_name}`);
+    if (evidence.cell_range) parts.push(`cells ${evidence.cell_range}`);
+    if (evidence.chunk_id) parts.push(`chunk ${evidence.chunk_id}`);
+    return parts.join(" · ") || "document-level reference";
   }
 
   function priorityFindings(findings) { return `<section class="panel"><h3>Priority findings</h3>${findingList(findings)}</section>`; }

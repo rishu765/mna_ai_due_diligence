@@ -20,7 +20,8 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 11 | Add controlled AI features where valuable | Complete |
 | 12 | Expand security and testing | Complete |
 | 13 | Deploy the pilot environment | In progress — deployment foundation implemented; live host pending |
-| 14–17 | Remaining locked sequence below | Not started |
+| 14 | Run an internal synthetic-data pilot | Formal step not started; pre-gate local rehearsal completed and remediated |
+| 15–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -159,6 +160,11 @@ live reviewer and restore acceptance checks pass.
 - Exercise the complete workflow with representative safe data and observe actual users.
 
 Exit: no unresolved critical defects and a documented internal evaluation report.
+
+A pre-gate local rehearsal is documented in
+[`PILOT_LOCAL_REHEARSAL.md`](PILOT_LOCAL_REHEARSAL.md). It does not start or complete Step 14 because
+the Step 13 live-host gate remains open. The rehearsal was used to identify and remediate correctness,
+auditability, and controlled-AI presentation issues before a formal hosted internal pilot.
 
 ## 15. Fix observed issues
 

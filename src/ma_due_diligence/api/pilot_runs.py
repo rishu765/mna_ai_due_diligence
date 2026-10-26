@@ -174,6 +174,12 @@ def run_payload(run_id: str, state: WorkflowState) -> dict[str, object]:
                         "document_id": evidence.document_id,
                         "pages": list(evidence.page_numbers),
                         "section": evidence.section,
+                        "table": evidence.table,
+                        "row": evidence.row,
+                        "column": evidence.column,
+                        "sheet_name": evidence.sheet_name,
+                        "cell_range": evidence.cell_range,
+                        "chunk_id": evidence.chunk_id,
                         "source_text": evidence.source_text,
                     }
                     for evidence in item.finding.evidence
