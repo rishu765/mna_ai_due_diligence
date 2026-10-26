@@ -83,7 +83,6 @@ and narrow-screen layout.
 
 - The UI is a minimum local pilot interface, not a deployed multi-tenant product.
 - Step 6 uses the synthetic VDR only; Step 7 subsequently adds the real upload inventory.
-- Review decisions are generated from the bounded demonstration policy rather than an editable
-  decision register; richer review and audit interactions are Step 9.
-- Report and Excel downloads are Step 10.
+- Step 9 subsequently adds complete per-finding dispositions and immutable decision history.
+- Step 10 subsequently adds reviewed PDF and Excel downloads generated from final application state.
 - Deployment, monitoring, backup, and rollback controls are Step 13.

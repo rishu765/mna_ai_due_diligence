@@ -32,6 +32,8 @@ The Step 8 versioned policies, source hierarchy, assumptions, thresholds, and ca
 documented in [Pilot Financial Methodology](docs/PILOT_FINANCIAL_METHODOLOGY.md).
 The Step 9 per-finding dispositions, conflict resolution, and immutable event register are documented
 in [Pilot Review Actions and Audit History](docs/PILOT_REVIEW_AND_AUDIT.md).
+The Step 10 reviewed PDF, Excel findings register, financial schedules, download controls, and
+export audit fingerprints are documented in [Pilot Report and Excel Exports](docs/PILOT_EXPORTS.md).
 
 M0 implements the typed domain foundation. M1/2 adds offline VDR ingestion, structure-aware
 chunking, deterministic indexing, hybrid evidence retrieval, bounded RAG context construction,
