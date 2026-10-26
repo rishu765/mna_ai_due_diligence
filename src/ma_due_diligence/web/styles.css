@@ -148,6 +148,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .report-section:last-child { border-bottom: 0; }
 .report-section h3 { font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 400; }
 .report-section p { color: var(--ink-soft); line-height: 1.65; }
+.export-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-left: 4px solid var(--green); }
+.export-panel h3 { margin: 0 0 6px; }
+.export-panel p { margin: 0; }
+.export-actions { display: flex; flex: 0 0 auto; gap: 10px; }
+.report-validation { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.report-finding { margin: 12px 0; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.report-finding summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px; cursor: pointer; }
+.report-finding > p, .report-citations { margin: 0; padding: 0 14px 14px; }
+.report-citations blockquote { margin: 8px 0 0; padding: 11px 13px; border-left: 3px solid var(--green); background: var(--green-soft); color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
 .loading { display: flex; align-items: center; gap: 10px; color: var(--ink-soft); }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -183,4 +192,7 @@ dialog::backdrop { background: rgba(13,44,42,.45); backdrop-filter: blur(3px); }
   .document-row { align-items: stretch; flex-direction: column; }
   .review-decision-heading { align-items: stretch; flex-direction: column; }
   .review-decision-heading small { text-align: left; }
+  .export-panel { align-items: stretch; flex-direction: column; }
+  .export-actions { flex-direction: column; }
+  .report-validation { grid-template-columns: 1fr 1fr; }
 }

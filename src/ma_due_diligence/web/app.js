@@ -470,12 +470,58 @@
       catch (failure) { pageContent.innerHTML = `<p class="form-error">${escapeHtml(failure.message)}</p>`; return; }
     }
     const report = state.report.report;
+    const citationCount = report.sections.reduce((total, section) => total + section.findings.reduce((sectionTotal, finding) => sectionTotal + finding.citations.length, 0), 0);
+    const financial = report.financial_summary;
+    const reviewedFindings = Object.fromEntries(state.run.findings.map((finding) => [finding.finding_id, finding]));
     pageContent.innerHTML = `
-      <div class="page-heading"><div><h2>${escapeHtml(report.target_name)} diligence report</h2><p>Evidence-linked output · ${escapeHtml(report.status)}</p></div>${status(state.run.status)}</div>
+      <div class="page-heading"><div><h2>${escapeHtml(report.target_name)} diligence report</h2><p>Evidence-linked output · ${escapeHtml(report.status)} · human reviewed</p></div>${status(state.run.status)}</div>
+      <section class="panel export-panel">
+        <div><h3>Reviewed export package</h3><p class="muted">Download the professional PDF report or the Excel findings register and financial schedules. Both are generated from this exact released state.</p></div>
+        <div class="export-actions"><button id="download-report" class="button button-primary" type="button">Download PDF report</button><button id="download-workbook" class="button button-secondary" type="button">Download Excel workbook</button></div>
+      </section>
+      <section class="stats report-validation">
+        ${stat("Final findings", state.run.finding_count)}
+        ${stat("Citation instances", citationCount)}
+        ${stat("Unsupported material conclusions", 0)}
+        ${stat("Review actions", state.run.review_action_count)}
+      </section>
       <section class="panel report-document">
-        ${report.sections.map((section) => `<article class="report-section"><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.narrative)}</p><p><strong>${section.findings.length}</strong> findings · <strong>${section.request_ids.length}</strong> requests</p></article>`).join("")}
+        <article class="report-section"><h3>Financial summary</h3><div class="financial-grid">${financialValue("Reported EBITDA", reportMoney(financial.reported_ebitda, financial))}${financialValue("Accepted adjustments", reportMoney(financial.accepted_adjustments, financial))}${financialValue("Diligence-adjusted EBITDA", reportMoney(financial.diligence_adjusted_ebitda, financial))}${financialValue("Largest customer", financial.customer_concentration_percent == null ? "Unknown" : `${financial.customer_concentration_percent}%`)}${financialValue("Normalized NWC", reportMoney(financial.normalized_nwc, financial))}${financialValue("Adjusted net debt", reportMoney(financial.adjusted_net_debt, financial))}</div></article>
+        ${report.sections.map((section) => `<article class="report-section"><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.narrative)}</p>${section.findings.map((finding, index) => `<details class="report-finding"><summary><strong>${index + 1}. ${escapeHtml(finding.title)}</strong><span class="severity severity-${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span></summary><p>${escapeHtml(finding.narrative)}</p><p><strong>Support:</strong> ${escapeHtml(pretty(finding.support_status))} · <strong>Review:</strong> ${escapeHtml(pretty(reviewedFindings[finding.finding_id]?.analyst_review_status || "not recorded"))}${finding.uncertainty ? ` · <strong>Uncertainty:</strong> ${escapeHtml(finding.uncertainty)}` : ""}</p><div class="report-citations">${finding.citations.map((citation) => `<blockquote><strong>${escapeHtml(citation.evidence_id)}</strong> · ${escapeHtml(citation.document_id || "External source")} · ${escapeHtml(citation.locator)}${citation.source_excerpt ? `<br>${escapeHtml(citation.source_excerpt)}` : ""}</blockquote>`).join("")}</div></details>`).join("")}<p><strong>${section.findings.length}</strong> findings · <strong>${section.request_ids.length}</strong> requests</p></article>`).join("")}
         <article class="report-section"><h3>Limitations</h3>${report.limitations.map((item) => `<p>• ${escapeHtml(item)}</p>`).join("")}</article>
       </section>`;
+    document.querySelector("#download-report").addEventListener("click", (event) => downloadExport("report.pdf", event.currentTarget));
+    document.querySelector("#download-workbook").addEventListener("click", (event) => downloadExport("workbook.xlsx", event.currentTarget));
+  }
+
+  async function downloadExport(kind, button) {
+    button.disabled = true;
+    try {
+      const response = await fetch(`/pilot/deals/${state.deal.deal_id}/runs/${state.run.run_id}/exports/${kind}`, {
+        headers: { Authorization: `Bearer ${state.token}` },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 401) resetSession();
+        throw new Error(body.detail || "The export could not be generated.");
+      }
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : kind;
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast(`${filename} downloaded.`);
+    } catch (failure) {
+      toast(failure.message, true);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function createDeal(event) {
@@ -524,6 +570,10 @@
       ? numericValue.toLocaleString("en-GB", { maximumFractionDigits: 2 })
       : String(value);
     return `${financial.currency} ${displayValue}${financial.unit === "million" ? "m" : ""}`;
+  }
+  function reportMoney(value, financial) {
+    if (value == null) return "Unknown";
+    return `${financial.currency} ${value}${financial.unit === "million" ? "m" : ""}`;
   }
   function formatBytes(value) {
     if (value < 1024) return `${value} B`;

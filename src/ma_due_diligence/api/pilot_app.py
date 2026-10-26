@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ma_due_diligence.domain import ReviewActionType
 from ma_due_diligence.financial.methodology import engagement_methodology_payload
-from ma_due_diligence.persistence import PilotDatabase, PilotDealRecord
+from ma_due_diligence.persistence import PilotAuditEvent, PilotDatabase, PilotDealRecord
 from ma_due_diligence.security import (
     AuthenticationError,
     AuthorizationError,
@@ -28,6 +28,7 @@ from .pilot_documents import (
     UploadRejectedError,
     document_payload,
 )
+from .pilot_exports import GeneratedExport, build_reviewed_report_pdf, build_reviewed_workbook
 from .pilot_runs import PilotRunService, review_history_payload, run_payload
 from .pilot_schemas import (
     AssignDealRoleRequest,
@@ -418,6 +419,60 @@ def create_pilot_app(context: PilotApiContext) -> FastAPI:
             raise HTTPException(status_code=409, detail="report is not available")
         return {"run_id": run_id, "status": state["status"], "report": report}
 
+    @app.get("/pilot/deals/{deal_id}/runs/{run_id}/exports/report.pdf")
+    def export_report_pdf(
+        deal_id: str,
+        run_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> Response:
+        runs = _runs_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+            deal = context.database.get_deal(deal_id)
+            if deal is None:
+                raise KeyError(f"deal not found: {deal_id}")
+            state = runs.state(deal_id=deal_id, run_id=run_id)
+            generated = build_reviewed_report_pdf(
+                deal,
+                state,
+                runs.review_history(deal_id=deal_id, run_id=run_id),
+            )
+        except (AuthorizationError, KeyError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+            ) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        _record_export(context.database, deal_id, run_id, authenticated.user_id, generated)
+        return _export_response(generated)
+
+    @app.get("/pilot/deals/{deal_id}/runs/{run_id}/exports/workbook.xlsx")
+    def export_workbook(
+        deal_id: str,
+        run_id: str,
+        authenticated: Annotated[AuthPrincipal, Depends(principal)],
+    ) -> Response:
+        runs = _runs_or_503(context)
+        try:
+            context.auth.require_permission(authenticated, deal_id, Permission.DEAL_READ)
+            deal = context.database.get_deal(deal_id)
+            if deal is None:
+                raise KeyError(f"deal not found: {deal_id}")
+            state = runs.state(deal_id=deal_id, run_id=run_id)
+            generated = build_reviewed_workbook(
+                deal,
+                state,
+                runs.review_history(deal_id=deal_id, run_id=run_id),
+            )
+        except (AuthorizationError, KeyError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+            ) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        _record_export(context.database, deal_id, run_id, authenticated.user_id, generated)
+        return _export_response(generated)
+
     return app
 
 
@@ -503,3 +558,44 @@ def _documents_or_503(context: PilotApiContext) -> PilotDocumentProcessingServic
     if context.documents is None:
         raise HTTPException(status_code=503, detail="document service is not configured")
     return context.documents
+
+
+def _record_export(
+    database: PilotDatabase,
+    deal_id: str,
+    run_id: str,
+    actor_id: str,
+    generated: GeneratedExport,
+) -> None:
+    database.append_audit_event(
+        PilotAuditEvent(
+            event_id=f"audit-{uuid4().hex}",
+            deal_id=deal_id,
+            actor_id=actor_id,
+            action="report_exported"
+            if generated.media_type == "application/pdf"
+            else "workbook_exported",
+            object_type="run",
+            object_id=run_id,
+            detail={
+                "filename": generated.filename,
+                "media_type": generated.media_type,
+                "size_bytes": len(generated.content),
+                "sha256": generated.sha256,
+            },
+            occurred_at=datetime.now(UTC),
+        )
+    )
+
+
+def _export_response(generated: GeneratedExport) -> Response:
+    return Response(
+        content=generated.content,
+        media_type=generated.media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{generated.filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-Export-SHA256": generated.sha256,
+        },
+    )

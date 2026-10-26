@@ -16,8 +16,9 @@ stage must meet its exit criteria and preserve the V1 evidence and review guaran
 | 7 | Strengthen document processing | Complete |
 | 8 | Formalize financial methodologies | Complete |
 | 9 | Connect review actions and audit history | Complete |
-| 10 | Add report and Excel exports | Next |
-| 11–17 | Remaining locked sequence below | Not started |
+| 10 | Add report and Excel exports | Complete |
+| 11 | Add controlled AI features where valuable | Next |
+| 12–17 | Remaining locked sequence below | Not started |
 
 ## 1. Freeze V1
 
@@ -104,6 +105,12 @@ assignment, comment, approval, rejection, edit, severity, information-request, a
 - Produce professional report, findings-register, and financial-schedule outputs.
 
 Exit: exported values, citations, review status, and limitations match application state.
+
+Implemented through the authenticated, release-gated PDF and Excel downloads documented in
+[`PILOT_EXPORTS.md`](PILOT_EXPORTS.md). The PDF provides the reviewed evidence-linked report; the
+workbook provides the complete findings register, citation ledger, review history, and deterministic
+financial schedules. Both derive from the final workflow state and append a content-digest audit
+event when downloaded.
 
 ## 11. Add controlled AI features where valuable
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 
+import pymupdf
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from pytest import MonkeyPatch
 
 from ma_due_diligence.api.pilot_app import PilotApiContext, create_pilot_app
@@ -17,7 +21,7 @@ from ma_due_diligence.workflow_final import WorkflowApplication, build_workflow
 _NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
 
-def _setup(tmp_path: Path, role: DealRole) -> tuple[TestClient, str]:
+def _setup(tmp_path: Path, role: DealRole) -> tuple[TestClient, str, PilotDatabase]:
     database = PilotDatabase(tmp_path / "pilot.sqlite3")
     database.initialize()
     deal = PilotDealRecord(
@@ -66,7 +70,7 @@ def _setup(tmp_path: Path, role: DealRole) -> tuple[TestClient, str]:
         "/pilot/auth/login",
         json={"email": member.email, "password": "member password long enough"},
     )
-    return client, str(login.json()["access_token"])
+    return client, str(login.json()["access_token"]), database
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -74,7 +78,7 @@ def _headers(token: str) -> dict[str, str]:
 
 
 def test_packaged_ui_is_served_with_accessible_sign_in(tmp_path: Path) -> None:
-    client, _ = _setup(tmp_path, DealRole.REVIEWER)
+    client, _, _ = _setup(tmp_path, DealRole.REVIEWER)
 
     response = client.get("/")
     script = client.get("/assets/app.js")
@@ -119,7 +123,7 @@ def test_runtime_bootstraps_configured_administrator(
 
 
 def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path: Path) -> None:
-    client, token = _setup(tmp_path, DealRole.REVIEWER)
+    client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
     headers = _headers(token)
 
     started = client.post("/pilot/deals/deal-a/runs", headers=headers)
@@ -189,7 +193,7 @@ def test_reviewer_can_run_review_and_retrieve_report_through_pilot_api(tmp_path:
 
 
 def test_review_rejects_partial_finding_disposition_without_history(tmp_path: Path) -> None:
-    client, token = _setup(tmp_path, DealRole.REVIEWER)
+    client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
     headers = _headers(token)
     paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
 
@@ -221,7 +225,7 @@ def test_review_rejects_partial_finding_disposition_without_history(tmp_path: Pa
 def test_edit_reject_severity_and_information_request_events_are_retained(
     tmp_path: Path,
 ) -> None:
-    client, token = _setup(tmp_path, DealRole.REVIEWER)
+    client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
     headers = _headers(token)
     paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
     actions = [
@@ -282,7 +286,7 @@ def test_edit_reject_severity_and_information_request_events_are_retained(
 
 
 def test_analyst_can_run_analysis_but_cannot_submit_review(tmp_path: Path) -> None:
-    client, token = _setup(tmp_path, DealRole.ANALYST)
+    client, token, _ = _setup(tmp_path, DealRole.ANALYST)
     headers = _headers(token)
     started = client.post("/pilot/deals/deal-a/runs", headers=headers)
     run_id = str(started.json()["run_id"])
@@ -304,3 +308,124 @@ def test_analyst_can_run_analysis_but_cannot_submit_review(tmp_path: Path) -> No
     )
 
     assert review.status_code == 403
+
+
+def test_released_report_and_workbook_exports_match_application_state(tmp_path: Path) -> None:
+    client, token, database = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+    decisions = [
+        {
+            "subject_type": "finding",
+            "subject_id": finding["finding_id"],
+            "action": "approve_finding",
+            "rationale": f"Approved {finding['finding_id']} against cited evidence.",
+        }
+        for finding in paused["findings"]
+    ]
+    decisions.extend(
+        {
+            "subject_type": "conflict",
+            "subject_id": conflict["conflict_id"],
+            "action": "resolve_conflict",
+            "rationale": "Selected the controlling direct source.",
+            "preferred_source_id": conflict["observation_fact_ids"][0],
+        }
+        for conflict in paused["conflicts"]
+        if conflict["conflict_id"] in paused["review_conflict_ids"]
+    )
+    reviewed = client.post(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/review",
+        headers=headers,
+        json={"rationale": "Completed export release review.", "decisions": decisions},
+    ).json()
+    report_payload = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/report",
+        headers=headers,
+    ).json()["report"]
+
+    pdf = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/exports/report.pdf",
+        headers=headers,
+    )
+    workbook_response = client.get(
+        f"/pilot/deals/deal-a/runs/{paused['run_id']}/exports/workbook.xlsx",
+        headers=headers,
+    )
+
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.headers["cache-control"] == "no-store"
+    assert pdf.headers["x-content-type-options"] == "nosniff"
+    assert pdf.headers["x-export-sha256"] == sha256(pdf.content).hexdigest()
+    assert "SecureTech-reviewed-diligence-report.pdf" in pdf.headers["content-disposition"]
+    with pymupdf.open(stream=pdf.content, filetype="pdf") as document:  # type: ignore[no-untyped-call]
+        pdf_text = "\n".join(page.get_text() for page in document)
+    assert "Reviewed M&A Due-Diligence Report" in pdf_text
+    assert "Diligence-adjusted EBITDA" in pdf_text
+    assert "GBP 15m" in pdf_text
+    assert "Explicit limitations" in pdf_text
+    assert report_payload["limitations"][0] in pdf_text
+
+    assert workbook_response.status_code == 200
+    assert workbook_response.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert (
+        workbook_response.headers["x-export-sha256"]
+        == sha256(workbook_response.content).hexdigest()
+    )
+    workbook = load_workbook(BytesIO(workbook_response.content), data_only=False)
+    assert workbook.sheetnames == [
+        "Read Me",
+        "Findings Register",
+        "Citations",
+        "Financial Summary",
+        "EBITDA Bridge",
+        "Working Capital",
+        "NWC Peg",
+        "Customer Concentration",
+        "Net Debt",
+        "Revenue Reconciliation",
+        "Review History",
+        "Limitations",
+    ]
+    findings_sheet = workbook["Findings Register"]
+    assert findings_sheet.max_row == reviewed["finding_count"] + 1
+    finding_headers = [cell.value for cell in findings_sheet[1]]
+    first_finding = dict(
+        zip(finding_headers, [cell.value for cell in findings_sheet[2]], strict=True)
+    )
+    assert first_finding["Finding ID"] == reviewed["findings"][0]["finding_id"]
+    assert first_finding["Severity"] == reviewed["findings"][0]["severity"]
+    assert first_finding["Review status"] == reviewed["findings"][0]["analyst_review_status"]
+    assert first_finding["Decision"] == "approved"
+    summary = {
+        row[0].value: row[1].value for row in workbook["Financial Summary"].iter_rows(min_row=2)
+    }
+    assert summary["Diligence-adjusted EBITDA"] == 15
+    assert summary["Normalized NWC"] == float(reviewed["financial"]["normalized_nwc"])
+    limitations = [row[1].value for row in workbook["Limitations"].iter_rows(min_row=2)]
+    assert limitations == report_payload["limitations"]
+    assert workbook["Review History"].max_row == 2 + (2 * len(decisions))
+    audit = database.list_audit_events("deal-a")
+    assert [event.action for event in audit[-2:]] == ["report_exported", "workbook_exported"]
+    assert audit[-1].detail["sha256"] == workbook_response.headers["x-export-sha256"]
+    assert "content" not in audit[-1].detail
+
+
+def test_exports_fail_closed_before_release_and_across_deals(tmp_path: Path) -> None:
+    client, token, _ = _setup(tmp_path, DealRole.REVIEWER)
+    headers = _headers(token)
+    paused = client.post("/pilot/deals/deal-a/runs", headers=headers).json()
+    path = f"/pilot/deals/deal-a/runs/{paused['run_id']}/exports/report.pdf"
+
+    assert client.get(path, headers=headers).status_code == 409
+    assert client.get(path).status_code == 401
+    assert (
+        client.get(
+            f"/pilot/deals/deal-b/runs/{paused['run_id']}/exports/report.pdf",
+            headers=headers,
+        ).status_code
+        == 404
+    )
